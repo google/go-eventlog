@@ -43,7 +43,7 @@ func testParseEventLog(t *testing.T, testdata string) {
 	if err := json.Unmarshal(data, &dump); err != nil {
 		t.Fatalf("parsing test data: %v", err)
 	}
-	if _, err := ParseEventLog(dump.Log.Raw); err != nil {
+	if _, err := ParseEventLog(dump.Log.Raw, ParseOpts{}); err != nil {
 		t.Fatalf("parsing event log: %v", err)
 	}
 }
@@ -53,7 +53,7 @@ func TestParseCryptoAgileEventLog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading test data: %v", err)
 	}
-	if _, err := ParseEventLog(data); err != nil {
+	if _, err := ParseEventLog(data, ParseOpts{}); err != nil {
 		t.Fatalf("parsing event log: %v", err)
 	}
 }
@@ -76,7 +76,7 @@ func testEventLog(t *testing.T, testdata string) {
 		t.Fatalf("parsing test data: %v", err)
 	}
 
-	el, err := ParseEventLog(dump.Log.Raw)
+	el, err := ParseEventLog(dump.Log.Raw, ParseOpts{})
 	if err != nil {
 		t.Fatalf("parsing event log: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestParseEventLogEventSizeTooLarge(t *testing.T) {
 
 	// If this doesn't panic, the test passed
 	// TODO(ericchiang): use errors.As once go-attestation switches to Go 1.13.
-	_, err := ParseEventLog(data)
+	_, err := ParseEventLog(data, ParseOpts{})
 	if err == nil {
 		t.Fatalf("expected parsing invalid event log to fail")
 	}
@@ -198,7 +198,7 @@ func TestParseShortNoAction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading test data: %v", err)
 	}
-	if _, err := ParseEventLog(data); err != nil {
+	if _, err := ParseEventLog(data, ParseOpts{}); err != nil {
 		t.Fatalf("parsing event log: %v", err)
 	}
 }
@@ -341,7 +341,7 @@ func TestEBSVerifyWorkaround(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	el, err := ParseEventLog(elr)
+	el, err := ParseEventLog(elr, ParseOpts{})
 	if err != nil {
 		t.Fatalf("ParseEventLog() failed: %v", err)
 	}
@@ -375,11 +375,11 @@ YWNrLHRvbW95byxicGYgcGFuaWM9MzAgaTkxNS5lbmFibGVfcHNyPTA=`)
 
 	// Make sure the combined log parses successfully and has one more
 	// event than the base log.
-	parsedBase, err := ParseEventLog(base)
+	parsedBase, err := ParseEventLog(base, ParseOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	parsed, err := ParseEventLog(combined)
+	parsed, err := ParseEventLog(combined, ParseOpts{})
 	if err != nil {
 		t.Fatalf("ParseEventLog(combined_log) failed: %v", err)
 	}

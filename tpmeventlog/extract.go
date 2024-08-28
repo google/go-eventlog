@@ -49,7 +49,7 @@ func ExtractFirmwareLogState(rawEventLog []byte, pcrBank register.PCRBank, opts 
 	if err != nil {
 		return &pb.FirmwareLogState{}, err
 	}
-	events, err := tcg.ParseAndReplay(rawEventLog, pcrBank.MRs())
+	events, err := tcg.ParseAndReplay(rawEventLog, pcrBank.MRs(), tcg.ParseOpts{})
 	if err != nil {
 		return nil, err
 	}

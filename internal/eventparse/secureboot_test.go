@@ -38,7 +38,7 @@ func TestSecureBoot(t *testing.T) {
 		t.Fatalf("parsing test data: %v", err)
 	}
 
-	el, err := tcg.ParseEventLog(dump.Log.Raw)
+	el, err := tcg.ParseEventLog(dump.Log.Raw, tcg.ParseOpts{})
 	if err != nil {
 		t.Fatalf("parsing event log: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestSecureBootBug157(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading test data: %v", err)
 	}
-	elr, err := tcg.ParseEventLog(raw)
+	elr, err := tcg.ParseEventLog(raw, tcg.ParseOpts{})
 	if err != nil {
 		t.Fatalf("parsing event log: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestSecureBootOptionRom(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading test data: %v", err)
 	}
-	elr, err := tcg.ParseEventLog(raw)
+	elr, err := tcg.ParseEventLog(raw, tcg.ParseOpts{})
 	if err != nil {
 		t.Fatalf("parsing event log: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestSecureBootEventLogUbuntu(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading test data: %v", err)
 	}
-	el, err := tcg.ParseEventLog(data)
+	el, err := tcg.ParseEventLog(data, tcg.ParseOpts{})
 	if err != nil {
 		t.Fatalf("parsing event log: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestSecureBootEventLogFedora36(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading test data: %v", err)
 	}
-	el, err := tcg.ParseEventLog(data)
+	el, err := tcg.ParseEventLog(data, tcg.ParseOpts{})
 	if err != nil {
 		t.Fatalf("parsing event log: %v", err)
 	}

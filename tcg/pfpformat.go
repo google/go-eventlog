@@ -153,12 +153,16 @@ func (e ReplayError) affected(mr int) bool {
 	return false
 }
 
-func ParseAndReplay(rawEventLog []byte, mrs []register.MR) ([]Event, error) {
+type ParseOpts struct {
+	AllowPadding bool
+}
+
+func ParseAndReplay(rawEventLog []byte, mrs []register.MR, parseOpts ParseOpts) ([]Event, error) {
 	// Similar to parseCanonicalEventLog, just return an empty array of events for an empty log
 	if len(rawEventLog) == 0 {
 		return nil, nil
 	}
-	eventLog, err := ParseEventLog(rawEventLog)
+	eventLog, err := ParseEventLog(rawEventLog, parseOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse event log: %v", err)
 	}
@@ -170,7 +174,7 @@ func ParseAndReplay(rawEventLog []byte, mrs []register.MR) ([]Event, error) {
 }
 
 // ParseEventLog parses an unverified measurement log.
-func ParseEventLog(measurementLog []byte) (*EventLog, error) {
+func ParseEventLog(measurementLog []byte, parseOpts ParseOpts) (*EventLog, error) {
 	var specID *specIDEvent
 	r := bytes.NewBuffer(measurementLog)
 	parseFn := parseRawEvent
@@ -211,6 +215,9 @@ func ParseEventLog(measurementLog []byte) (*EventLog, error) {
 	sequence := 1
 	for r.Len() != 0 {
 		e, err := parseFn(r, specID)
+		if err == errEventLogPadding && parseOpts.AllowPadding {
+			break
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -552,7 +559,7 @@ func (e *eventSizeErr) Error() string {
 // Additional logs must not use a digest algorithm which was not
 // present in the original log.
 func AppendEvents(base []byte, additional ...[]byte) ([]byte, error) {
-	baseLog, err := ParseEventLog(base)
+	baseLog, err := ParseEventLog(base, ParseOpts{})
 	if err != nil {
 		return nil, fmt.Errorf("base: %v", err)
 	}
@@ -565,7 +572,7 @@ func AppendEvents(base []byte, additional ...[]byte) ([]byte, error) {
 	out := bytes.NewBuffer(outBuff)
 
 	for i, l := range additional {
-		log, err := ParseEventLog(l)
+		log, err := ParseEventLog(l, ParseOpts{})
 		if err != nil {
 			return nil, fmt.Errorf("log %d: %v", i, err)
 		}
@@ -664,6 +671,9 @@ func parseRawEvent2(r *bytes.Buffer, specID *specIDEvent) (event rawEvent, err e
 	if err = binary.Read(r, binary.LittleEndian, &h); err != nil {
 		return event, err
 	}
+	if h.PCRIndex == 0xFFFFFFFF {
+		return event, errEventLogPadding
+	}
 	event.typ = EventType(h.Type)
 	event.index = int(h.PCRIndex)
 
@@ -715,3 +725,5 @@ func parseRawEvent2(r *bytes.Buffer, specID *specIDEvent) (event rawEvent, err e
 	}
 	return event, err
 }
+
+var errEventLogPadding error = errors.New("reached padding before event log EOF")

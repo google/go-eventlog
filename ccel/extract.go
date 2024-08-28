@@ -59,7 +59,8 @@ func ExtractFirmwareLogState(acpiTableFile []byte, rawEventLog []byte, rtmrBank 
 	if err != nil {
 		return &pb.FirmwareLogState{}, err
 	}
-	events, err := tcg.ParseAndReplay(rawEventLog, rtmrBank.MRs())
+	// CCELs have trailing padding at the end of the event log.
+	events, err := tcg.ParseAndReplay(rawEventLog, rtmrBank.MRs(), tcg.ParseOpts{AllowPadding: true})
 	if err != nil {
 		return nil, err
 	}
