@@ -25,7 +25,8 @@ import (
 	"github.com/google/go-eventlog/tcg"
 )
 
-func GetGrubStateForTPMLog(hash crypto.Hash, events []tcg.Event, registerCfg RegisterConfig) (*pb.GrubState, error) {
+// GetGrubStateForTPMLog extracts GRUB commands from PCR8 and GRUB files from 9.
+func GetGrubStateForTPMLog(hash crypto.Hash, events []tcg.Event) (*pb.GrubState, error) {
 	var files []*pb.GrubFile
 	var commands []string
 	for eventNum, event := range events {

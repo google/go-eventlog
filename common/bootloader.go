@@ -12,10 +12,10 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-// common provides types and functions for use across event log parsing.
+// Package common provides types and functions for use across event log parsing.
 package common
 
-// common.Bootloader refers to the second-stage bootloader that loads and transfers
+// Bootloader refers to the second-stage bootloader that loads and transfers
 // execution to the OS kernel.
 type Bootloader int
 

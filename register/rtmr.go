@@ -30,10 +30,12 @@ type RTMRBank struct {
 	RTMRs []RTMR
 }
 
+// CryptoHash returns the crypto.Hash algorithm related to the RTMR bank.
 func (b *RTMRBank) CryptoHash() (crypto.Hash, error) {
 	return crypto.SHA384, nil
 }
 
+// MRs returns a slice of MR from the RTMR implementation.
 func (b RTMRBank) MRs() []MR {
 	mrs := make([]MR, len(b.RTMRs))
 	for i, v := range b.RTMRs {
@@ -50,19 +52,21 @@ type RTMR struct {
 	Digest []byte
 }
 
+// Idx gives the RTMR index.
 // Confusingly, MRTD uses CC Measurement Register Index 0, so RTMR0 uses 1.
 // RTMR1 uses 2, and so on.
 // https://cdrdv2-public.intel.com/726792/TDX%20Guest-Hypervisor%20Communication%20Interface_1.5_348552_004%20-%2020230317.pdf
 // https://github.com/cc-api/cc-trusted-vmsdk/issues/50
-// TODO: should this go in an event log option?
 func (r RTMR) Idx() int {
 	return r.Index + 1
 }
 
+// Dgst gives the RTMR digest.
 func (r RTMR) Dgst() []byte {
 	return r.Digest
 }
 
+// DgstAlg gives the RTMR digest algorithm as a crypto.Hash.
 func (r RTMR) DgstAlg() crypto.Hash {
 	return crypto.SHA384
 }

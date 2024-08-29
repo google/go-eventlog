@@ -25,6 +25,7 @@ import (
 	"github.com/google/go-eventlog/tcg"
 )
 
+// ExtractOpts gives options for extracting information from an event log.
 type ExtractOpts struct {
 	Loader common.Bootloader
 }

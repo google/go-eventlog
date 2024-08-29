@@ -33,6 +33,8 @@ type RegisterConfig struct {
 	AdditionalSecureBootIdxEvents map[tcg.EventType]bool
 }
 
+// TPMRegisterConfig configures the expected indexes and event types for
+// TPM-based event logs.
 var TPMRegisterConfig = RegisterConfig{
 	Name:                "PCR",
 	FirmwareDriverIdx:   2,
@@ -46,6 +48,8 @@ var TPMRegisterConfig = RegisterConfig{
 	// for PCR 7.
 }
 
+// RTMRRegisterConfig configures the expected indexes and event types for
+// RTMR-based event logs.
 var RTMRRegisterConfig = RegisterConfig{
 	Name: "RTMR",
 	// CCMR2=RTMR[1]=PCR[2]
@@ -64,7 +68,7 @@ var RTMRRegisterConfig = RegisterConfig{
 	// Pulled from "Table 27 Events" in
 	// "TCG PC Client Platform Firmware Profile Specification"
 	AdditionalSecureBootIdxEvents: map[tcg.EventType]bool{
-		tcg.CpuMicrocode:            true,
+		tcg.CPUMicrocode:            true,
 		tcg.PlatformConfigFlags:     true,
 		tcg.TableOfDevices:          true,
 		tcg.NonhostConfig:           true,
@@ -72,9 +76,9 @@ var RTMRRegisterConfig = RegisterConfig{
 		tcg.EFIVariableBoot:         true,
 		tcg.EFIAction:               true,
 		tcg.EFIHandoffTables2:       true,
-		//tcg.EFIVariableBoot2:        true,
+		tcg.EFIVariableBoot2:        true,
 		// https://github.com/tianocore/edk2/blob/a29a9cce5f9afa32560d966e501247246ec96ef6/OvmfPkg/IntelTdx/TdxHelperLib/TdxMeasurementHob.c#L245
-		// The following is not spec-compliant and we should remove it.
+		// The following is not spec-compliant for PCR 1 or 7. The spec says [0, 2, 4].
 		tcg.EFIPlatformFirmwareBlob2: true,
 	},
 }

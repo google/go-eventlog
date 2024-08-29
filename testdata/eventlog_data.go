@@ -12,6 +12,7 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
+// Package testdata contains event logs and event log-related info for testing.
 package testdata
 
 import _ "embed" // Necessary to use go:embed

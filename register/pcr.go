@@ -12,7 +12,7 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-// Package register measurement register-specific implementations.
+// Package register contains measurement register-specific implementations.
 package register
 
 import (
@@ -29,6 +29,7 @@ type PCRBank struct {
 	PCRs        []PCR
 }
 
+// CryptoHash returns the crypto.Hash algorithm related to the PCR bank.
 func (b PCRBank) CryptoHash() (crypto.Hash, error) {
 	cryptoHash, err := b.TCGHashAlgo.CryptoHash()
 	if err != nil {
@@ -46,6 +47,7 @@ func (b PCRBank) CryptoHash() (crypto.Hash, error) {
 	return cryptoHash, nil
 }
 
+// MRs returns a slice of MR from the PCR implementation.
 func (b PCRBank) MRs() []MR {
 	mrs := make([]MR, len(b.PCRs))
 	for i, v := range b.PCRs {
@@ -66,20 +68,22 @@ type PCR struct {
 	quoteVerified bool
 }
 
+// Idx gives the PCR index.
 func (p PCR) Idx() int {
 	return p.Index
 }
 
+// Dgst gives the PCR digest.
 func (p PCR) Dgst() []byte {
 	return p.Digest
 }
 
+// DgstAlg gives the PCR digest algorithm as a crypto.Hash.
 func (p PCR) DgstAlg() crypto.Hash {
 	return p.DigestAlg
 }
 
-// QuoteVerified returns true if the value of this PCR was previously
-// verified against a Quote, in a call to AKPublic.Verify or AKPublic.VerifyAll.
+// SetQuoteVerified sets that the quote verified is true.
 // NOT for use in go-eventlog.
 // Included for backcompat with the go-attestation API.
 func (p *PCR) SetQuoteVerified() {
@@ -118,6 +122,8 @@ func (a HashAlg) CryptoHash() crypto.Hash {
 	return 0
 }
 
+// GoTPMAlg returns the go-tpm definition of this crypto.Hash, based on the
+// TCG Algorithm Registry.
 func (a HashAlg) GoTPMAlg() tpm2.Algorithm {
 	switch a {
 	case HashSHA1:

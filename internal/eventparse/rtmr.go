@@ -25,8 +25,8 @@ import (
 	"github.com/google/go-eventlog/tcg"
 )
 
-func GetGrubStateForRTMRLog(hash crypto.Hash, events []tcg.Event, registerCfg RegisterConfig) (*pb.GrubState, error) {
-	var files []*pb.GrubFile
+// GetGrubStateForRTMRLog extracts GRUB commands from RTMR2.
+func GetGrubStateForRTMRLog(hash crypto.Hash, events []tcg.Event, _ RegisterConfig) (*pb.GrubState, error) {
 	var commands []string
 	for eventNum, event := range events {
 		ccMRIndex := event.MRIndex()
@@ -57,7 +57,7 @@ func GetGrubStateForRTMRLog(hash crypto.Hash, events []tcg.Event, registerCfg Re
 			hasher.Reset()
 			hasher.Write(rawData[suffixAt:])
 			if !bytes.Equal(event.ReplayedDigest(), hasher.Sum(nil)) {
-				return nil, fmt.Errorf("invalid digest seen for GRUB event log in event %d: %s", eventNum, hex.EncodeToString(event.ReplayedDigest()))
+				return nil, fmt.Errorf("invalid digest seen for GRthe UB event log in event %d: %s", eventNum, hex.EncodeToString(event.ReplayedDigest()))
 			}
 		}
 		hasher.Reset()
@@ -66,5 +66,5 @@ func GetGrubStateForRTMRLog(hash crypto.Hash, events []tcg.Event, registerCfg Re
 	if len(commands) == 0 {
 		return nil, errors.New("no GRUB measurements found")
 	}
-	return &pb.GrubState{Files: files, Commands: commands}, nil
+	return &pb.GrubState{Commands: commands}, nil
 }

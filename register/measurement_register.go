@@ -18,6 +18,8 @@ import (
 	"crypto"
 )
 
+// MRBank is a generic interface for a collection of measurement registers
+// associated with the same hash algorithm.
 type MRBank interface {
 	CryptoHash() (crypto.Hash, error)
 	MRs() []MR

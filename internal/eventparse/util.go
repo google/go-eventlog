@@ -25,6 +25,7 @@ import (
 	"github.com/google/go-eventlog/tcg"
 )
 
+// DigestEquals returns an error if the Event digest does not match the slice.
 func DigestEquals(e tcg.Event, b []byte) error {
 	digest := e.ReplayedDigest()
 

@@ -12,7 +12,7 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-// package legacy contains the legacy API adaptors for use by go-attestation.
+// Package legacy contains the legacy API adaptors for use by go-attestation.
 package legacy
 
 import "github.com/google/go-eventlog/tcg"

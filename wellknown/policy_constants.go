@@ -12,7 +12,8 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-// package wellknown provides events, event data, other constants, and helper functions for parsing event information and enforcing policy decisions.
+// Package wellknown provides events, event data, other constants, and helper
+// functions for parsing event information and enforcing policy decisions.
 package wellknown
 
 import (

@@ -74,7 +74,7 @@ const (
 	EventTag             EventType = 0x00000006
 	SCRTMContents        EventType = 0x00000007
 	SCRTMVersion         EventType = 0x00000008
-	CpuMicrocode         EventType = 0x00000009
+	CPUMicrocode         EventType = 0x00000009
 	PlatformConfigFlags  EventType = 0x0000000A
 	TableOfDevices       EventType = 0x0000000B
 	CompactHash          EventType = 0x0000000C
@@ -105,6 +105,7 @@ const (
 	EFIVariableAuthority       EventType = 0x800000E0
 )
 
+// EventTypeNames maps an EventType to its name.
 var EventTypeNames = map[EventType]string{
 	PrebootCert:          "Preboot Cert",
 	PostCode:             "POST Code",
@@ -115,7 +116,7 @@ var EventTypeNames = map[EventType]string{
 	EventTag:             "Event Tag",
 	SCRTMContents:        "S-CRTM Contents",
 	SCRTMVersion:         "S-CRTM Version",
-	CpuMicrocode:         "CPU Microcode",
+	CPUMicrocode:         "CPU Microcode",
 	PlatformConfigFlags:  "Platform Config Flags",
 	TableOfDevices:       "Table of Devices",
 	CompactHash:          "Compact Hash",
@@ -180,14 +181,25 @@ var eventTypeStrings = map[uint32]string{
 	0x800000E0: "EV_EFI_VARIABLE_AUTHORITY",
 }
 
+// KnownName returns an event type's readable name if it exists.
 func (e EventType) KnownName() (string, bool) {
 	name, ok := EventTypeNames[e]
 	return name, ok
 }
 
+// String returns an event type's readable name or the hex-formatted string.
 func (e EventType) String() string {
 	if s, ok := e.KnownName(); ok {
 		return s
+	}
+	return fmt.Sprintf("EventType(0x%08x)", uint32(e))
+}
+
+// TCGString returns an event type's string as it appears in the TCG spec.
+func (e EventType) TCGString() string {
+	tcgStr, ok := eventTypeStrings[uint32(e)]
+	if ok {
+		return tcgStr
 	}
 	return fmt.Sprintf("EventType(0x%08x)", uint32(e))
 }
@@ -329,10 +341,12 @@ func ParseUEFIVariableData(r io.Reader) (ret UEFIVariableData, err error) {
 	return
 }
 
+// VarName returns the UEFI variable name.
 func (v *UEFIVariableData) VarName() string {
 	return string(utf16.Decode(v.UnicodeName))
 }
 
+// SignatureData parses a UEFI variable for signature data.
 func (v *UEFIVariableData) SignatureData() (certs []x509.Certificate, hashes [][]byte, err error) {
 	return parseEfiSignatureList(v.VariableData)
 }
@@ -529,6 +543,7 @@ func parseEfiSignature(b []byte) ([]x509.Certificate, error) {
 	return certificates, err
 }
 
+// EFIDevicePathElement describes an EFI_DEVICE_PATH.
 type EFIDevicePathElement struct {
 	Type    EFIDeviceType
 	Subtype uint8
@@ -541,6 +556,7 @@ type EFIImageLoad struct {
 	DevPathData []byte
 }
 
+// EFIImageLoadHeader is the header of an EFI_IMAGE_LOAD_EVENT structure.
 type EFIImageLoadHeader struct {
 	LoadAddr      uint64
 	Length        uint64
@@ -576,6 +592,7 @@ func parseDevicePathElement(r io.Reader) (EFIDevicePathElement, error) {
 	return out, nil
 }
 
+// DevicePath returns the device path of an EFI_IMAGE_LOAD_EVENT.
 func (h *EFIImageLoad) DevicePath() ([]EFIDevicePathElement, error) {
 	var (
 		r   = bytes.NewReader(h.DevPathData)

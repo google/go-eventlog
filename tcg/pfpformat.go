@@ -12,7 +12,7 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-// package tcg exposes utilities and constants that correspond to TCG specs
+// Package tcg exposes utilities and constants that correspond to TCG specs
 // including TPM 2.0 and the PC Client Platform Firmware Profile.
 package tcg
 
@@ -33,6 +33,7 @@ import (
 
 type digestVerified int
 
+// Verified statuses.
 const (
 	UNKNOWN digestVerified = iota
 	VERIFIED
@@ -73,14 +74,17 @@ type Event struct {
 	// match their data to their digest.
 }
 
+// Num is the event number.
 func (e Event) Num() uint32 {
 	return uint32(e.sequence)
 }
 
+// MRIndex is the event measurement register index.
 func (e Event) MRIndex() uint32 {
 	return uint32(e.Index)
 }
 
+// UntrustedType gives the unmeasured event type.
 func (e Event) UntrustedType() EventType {
 	tcgEvent := EventType(e.Type)
 	if _, ok := tcgEvent.KnownName(); !ok {
@@ -89,14 +93,17 @@ func (e Event) UntrustedType() EventType {
 	return tcgEvent
 }
 
+// RawData gives the event data.
 func (e Event) RawData() []byte {
 	return e.Data
 }
 
+// ReplayedDigest gives the event's digest
 func (e Event) ReplayedDigest() []byte {
 	return e.Digest
 }
 
+// DigestVerified returns whether the event's data matches its digest.
 // This must not be used before calling EventLog.Verify.
 func (e Event) DigestVerified() bool {
 	if e.digestVerified != UNKNOWN {
@@ -153,10 +160,13 @@ func (e ReplayError) affected(mr int) bool {
 	return false
 }
 
+// ParseOpts gives options for parsing the event log.
 type ParseOpts struct {
 	AllowPadding bool
 }
 
+// ParseAndReplay takes a raw TCG measurement log, parses it, and replays it
+// against the given measurement registers.
 func ParseAndReplay(rawEventLog []byte, mrs []register.MR, parseOpts ParseOpts) ([]Event, error) {
 	// Similar to parseCanonicalEventLog, just return an empty array of events for an empty log
 	if len(rawEventLog) == 0 {
@@ -634,7 +644,7 @@ type rawEventHeader struct {
 	EventSize uint32
 }
 
-func parseRawEvent(r *bytes.Buffer, specID *specIDEvent) (event rawEvent, err error) {
+func parseRawEvent(r *bytes.Buffer, _ *specIDEvent) (event rawEvent, err error) {
 	var h rawEventHeader
 	if err = binary.Read(r, binary.LittleEndian, &h); err != nil {
 		return event, fmt.Errorf("header deserialization error: %w", err)
@@ -726,4 +736,4 @@ func parseRawEvent2(r *bytes.Buffer, specID *specIDEvent) (event rawEvent, err e
 	return event, err
 }
 
-var errEventLogPadding error = errors.New("reached padding before event log EOF")
+var errEventLogPadding = errors.New("reached padding before event log EOF")

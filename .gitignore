@@ -1,2 +1,8 @@
+*.test
+*.test.exe
+*.pkg.tar.xz
 .vscode*
 *.code-workspace
+main
+go.work
+go.work.sum

@@ -61,6 +61,7 @@ const (
 	ebsFailure    = "Exit Boot Services Returned with Failure"
 )
 
+// EventlogWorkarounds fix known event log issues/bugs.
 var EventlogWorkarounds = []elWorkaround{
 	{
 		id:          "EBS Invocation + Success",

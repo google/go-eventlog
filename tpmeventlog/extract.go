@@ -12,6 +12,9 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
+// Package tpmeventlog implements event log parsing and replay for the PC Client
+// TPM PCR_based event log.
+// It supports both the SHA-1 only and crypto agile log formats.
 package tpmeventlog
 
 import (
@@ -24,6 +27,7 @@ import (
 	"github.com/google/go-eventlog/tcg"
 )
 
+// ExtractOpts gives options for extracting information from an event log.
 type ExtractOpts struct {
 	Loader common.Bootloader
 }
@@ -70,7 +74,7 @@ func ExtractFirmwareLogState(rawEventLog []byte, pcrBank register.PCRBank, opts 
 	var grub *pb.GrubState
 	var kernel *pb.LinuxKernelState
 	if opts.Loader == common.GRUB {
-		grub, err = eventparse.GetGrubStateForTPMLog(cryptoHash, events, eventparse.TPMRegisterConfig)
+		grub, err = eventparse.GetGrubStateForTPMLog(cryptoHash, events)
 		if err != nil {
 			joined = errors.Join(joined, err)
 		}

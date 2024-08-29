@@ -125,6 +125,8 @@ func matchWellKnown(cert x509.Certificate) (pb.WellKnownCertificate, error) {
 	return pb.WellKnownCertificate_UNKNOWN, errors.New("failed to find matching well known certificate")
 }
 
+// GetSecureBootState extracts Secure Boot information from a UEFI TCG2
+// firmware event log.
 func GetSecureBootState(replayEvents []tcg.Event, registerCfg RegisterConfig) (*pb.SecureBootState, error) {
 	attestSbState, err := ParseSecurebootState(replayEvents, registerCfg)
 	if err != nil {
@@ -141,6 +143,10 @@ func GetSecureBootState(replayEvents []tcg.Event, registerCfg RegisterConfig) (*
 	}, nil
 }
 
+// GetSecureBootStateInsecure extracts Secure Boot information from a UEFI TCG2
+// firmware event log in an insecure manner.
+// TODO: we should remove this before cutting a release.
+// We MUST remove before v0.1.0
 func GetSecureBootStateInsecure(replayEvents []tcg.Event, registerCfg RegisterConfig) (*pb.SecureBootState, error) {
 	attestSbState, err := ParseSecurebootStateInsecure(replayEvents, registerCfg)
 	if err != nil {
@@ -157,6 +163,8 @@ func GetSecureBootStateInsecure(replayEvents []tcg.Event, registerCfg RegisterCo
 	}, nil
 }
 
+// GetPlatformState extracts platform information from a UEFI TCG2 firmware
+// event log.
 func GetPlatformState(hash crypto.Hash, events []tcg.Event) (*pb.PlatformState, error) {
 	// We pre-compute the separator and EFI Action event hash.
 	// We check if these events have been modified, since the event type is
@@ -208,6 +216,8 @@ func GetPlatformState(hash crypto.Hash, events []tcg.Event) (*pb.PlatformState, 
 	return state, nil
 }
 
+// GetEfiState extracts EFI app information from a UEFI TCG2 firmware
+// event log.
 func GetEfiState(hash crypto.Hash, events []tcg.Event, registerCfg RegisterConfig) (*pb.EfiState, error) {
 	// We pre-compute various event digests, and check if those event type have
 	// been modified. We only trust events that come before the
@@ -312,6 +322,7 @@ func GetEfiState(hash crypto.Hash, events []tcg.Event, registerCfg RegisterConfi
 	return nil, nil
 }
 
+// GetLinuxKernelStateFromGRUB extracts the kernel command line from GrubState.
 func GetLinuxKernelStateFromGRUB(grub *pb.GrubState) (*pb.LinuxKernelState, error) {
 	var cmdline string
 	seen := false

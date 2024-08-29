@@ -71,6 +71,7 @@ type SecurebootState struct {
 // DriverLoadSource describes the logical origin of a boot services driver.
 type DriverLoadSource uint8
 
+// Known sources for loaded drivers.
 const (
 	UnknownSource DriverLoadSource = iota
 	PciMmioSource
@@ -81,7 +82,7 @@ const (
 // the state cannot be determined, or if the event log is structured
 // in such a way that it may have been tampered post-execution of
 // platform firmware.
-// ParseSecurebootStateLegacy assumes events are sources from a TPM event
+// ParseSecurebootStateLegacy assumes events are sourced from a TPM event
 // log. It is meant for use with go-attestation.
 func ParseSecurebootStateLegacy(events []tcg.Event) (*SecurebootState, error) {
 	// This algorithm verifies the following:
@@ -99,6 +100,11 @@ func ParseSecurebootStateLegacy(events []tcg.Event) (*SecurebootState, error) {
 	return ParseSecurebootState(events, TPMRegisterConfig)
 }
 
+// ParseSecurebootState parses a series of events to determine the
+// configuration of secure boot on a device. An error is returned if
+// the state cannot be determined, or if the event log is structured
+// in such a way that it may have been tampered post-execution of
+// platform firmware.
 func ParseSecurebootState(events []tcg.Event, registerCfg RegisterConfig) (*SecurebootState, error) {
 	var (
 		out            SecurebootState

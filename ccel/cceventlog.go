@@ -12,7 +12,7 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-// package ccel implements event log parsing and replay for the Confidential Computing event log.
+// Package ccel implements event log parsing and replay for the Confidential Computing event log.
 // It only supports the CCEL based on the TCG crypto-agile event log (including
 // the "Spec ID Event03" signature).
 package ccel
@@ -43,14 +43,19 @@ const (
 	CCELACPITableMinSize = 56
 )
 
+// CCType describes the Confidential Computing type for the Confidential
+// Computing event log.
 type CCType uint8
 
+// Known CC types.
+// See https://uefi.org/specs/ACPI/6.5/05_ACPI_Software_Programming_Model.html#cc-event-log-acpi-table.
 const (
 	Reserved = iota
 	SEV
 	TDX
 )
 
+// CCACPITable represents the confidential computing (CC) event log ACPI table.
 type CCACPITable struct {
 	Length uint32
 	CCType

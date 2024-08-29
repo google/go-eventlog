@@ -12,6 +12,8 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
+// Package state contains the definitions and utilities related to extracting
+// information from an event log.
 package state
 
 import (
@@ -20,6 +22,7 @@ import (
 	"github.com/google/go-tpm/legacy/tpm2"
 )
 
+// CryptoHash converts the TCG registry hash identifier to a crypto.Hash.
 func (ha HashAlgo) CryptoHash() (crypto.Hash, error) {
 	tcgHash := tpm2.Algorithm(uint16(ha))
 	cryptoHash, err := tcgHash.Hash()
