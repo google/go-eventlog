@@ -52,7 +52,8 @@ type RTMR struct {
 	Digest []byte
 }
 
-// Idx gives the RTMR index.
+// Idx gives the CC Measurement Register index.
+// This value is the one used in Confidential Computing event logs.
 // Confusingly, MRTD uses CC Measurement Register Index 0, so RTMR0 uses 1.
 // RTMR1 uses 2, and so on.
 // https://cdrdv2-public.intel.com/726792/TDX%20Guest-Hypervisor%20Communication%20Interface_1.5_348552_004%20-%2020230317.pdf
