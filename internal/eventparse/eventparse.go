@@ -143,26 +143,6 @@ func GetSecureBootState(replayEvents []tcg.Event, registerCfg RegisterConfig) (*
 	}, nil
 }
 
-// GetSecureBootStateInsecure extracts Secure Boot information from a UEFI TCG2
-// firmware event log in an insecure manner.
-// TODO: we should remove this before cutting a release.
-// We MUST remove before v0.1.0
-func GetSecureBootStateInsecure(replayEvents []tcg.Event, registerCfg RegisterConfig) (*pb.SecureBootState, error) {
-	attestSbState, err := ParseSecurebootStateInsecure(replayEvents, registerCfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse SecureBootState: %v", err)
-	}
-	if len(attestSbState.PreSeparatorAuthority) != 0 {
-		return nil, fmt.Errorf("event log contained %v pre-separator authorities, which are not expected or supported", len(attestSbState.PreSeparatorAuthority))
-	}
-	return &pb.SecureBootState{
-		Enabled:   attestSbState.Enabled,
-		Db:        convertToPbDatabase(attestSbState.PermittedKeys, attestSbState.PermittedHashes),
-		Dbx:       convertToPbDatabase(attestSbState.ForbiddenKeys, attestSbState.ForbiddenHashes),
-		Authority: convertToPbDatabase(attestSbState.PostSeparatorAuthority, nil),
-	}, nil
-}
-
 // GetPlatformState extracts platform information from a UEFI TCG2 firmware
 // event log.
 func GetPlatformState(hash crypto.Hash, events []tcg.Event) (*pb.PlatformState, error) {

@@ -30,7 +30,7 @@ type eventLog struct {
 }
 
 var COS113TDXUnpadded = eventLog{
-	fname: "../testdata/eventlogs/ccel/cos-113-intel-tdx-unpadded.bin",
+	fname: "../testdata/eventlogs/ccel/cos-113-intel-tdx-dupe-separator-unpadded.bin",
 	mrs: []register.MR{
 		register.RTMR{
 			Index:  0,
@@ -48,7 +48,7 @@ var COS113TDXUnpadded = eventLog{
 }
 
 var COS113TDXPadded = eventLog{
-	fname: "../testdata/eventlogs/ccel/cos-113-intel-tdx.bin",
+	fname: "../testdata/eventlogs/ccel/cos-113-intel-tdx-dupe-separator.bin",
 	mrs: []register.MR{
 		register.RTMR{
 			Index:  0,
