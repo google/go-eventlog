@@ -31,7 +31,7 @@ type RTMRBank struct {
 }
 
 // CryptoHash returns the crypto.Hash algorithm related to the RTMR bank.
-func (b *RTMRBank) CryptoHash() (crypto.Hash, error) {
+func (b RTMRBank) CryptoHash() (crypto.Hash, error) {
 	return crypto.SHA384, nil
 }
 
