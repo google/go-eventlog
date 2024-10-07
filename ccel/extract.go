@@ -74,7 +74,7 @@ func ExtractFirmwareLogState(acpiTableFile []byte, rawEventLog []byte, rtmrBank 
 		3       RTMR[2]  8-15
 		4       RTMR[3]  n/a
 	*/
-	sbState, err := eventparse.GetSecureBootStateInsecure(events, eventparse.RTMRRegisterConfig)
+	sbState, err := eventparse.GetSecureBootState(events, eventparse.RTMRRegisterConfig)
 	if err != nil {
 		joined = errors.Join(joined, err)
 	}
