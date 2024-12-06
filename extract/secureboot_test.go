@@ -12,7 +12,7 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-package eventparse_test
+package extract_test
 
 import (
 	"crypto"
@@ -21,7 +21,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/google/go-eventlog/internal/eventparse"
+	"github.com/google/go-eventlog/extract"
 	"github.com/google/go-eventlog/internal/testutil"
 	"github.com/google/go-eventlog/proto/state"
 	"github.com/google/go-eventlog/register"
@@ -29,7 +29,7 @@ import (
 )
 
 func TestSecureBoot(t *testing.T) {
-	data, err := os.ReadFile("../../testdata/legacydata/windows_gcp_shielded_vm.json")
+	data, err := os.ReadFile("../testdata/legacydata/windows_gcp_shielded_vm.json")
 	if err != nil {
 		t.Fatalf("reading test data: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestSecureBoot(t *testing.T) {
 		t.Fatalf("validating event log: %v", err)
 	}
 
-	sbState, err := eventparse.ParseSecurebootState(events, eventparse.TPMRegisterConfig)
+	sbState, err := extract.ParseSecurebootState(events, extract.TPMRegisterConfig)
 	if err != nil {
 		t.Fatalf("ExtractSecurebootState() failed: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestSecureBoot(t *testing.T) {
 
 // See: https://github.com/google/go-attestation/issues/157
 func TestSecureBootBug157(t *testing.T) {
-	raw, err := os.ReadFile("../../testdata/legacydata/sb_cert_eventlog")
+	raw, err := os.ReadFile("../testdata/legacydata/sb_cert_eventlog")
 	if err != nil {
 		t.Fatalf("reading test data: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestSecureBootBug157(t *testing.T) {
 		t.Fatalf("failed to verify log: %v", err)
 	}
 
-	sbs, err := eventparse.ParseSecurebootState(events, eventparse.TPMRegisterConfig)
+	sbs, err := extract.ParseSecurebootState(events, extract.TPMRegisterConfig)
 	if err != nil {
 		t.Fatalf("failed parsing secureboot state: %v", err)
 	}
@@ -145,7 +145,7 @@ func b64MustDecode(input string) []byte {
 }
 
 func TestSecureBootOptionRom(t *testing.T) {
-	raw, err := os.ReadFile("../../testdata/legacydata/option_rom_eventlog")
+	raw, err := os.ReadFile("../testdata/legacydata/option_rom_eventlog")
 	if err != nil {
 		t.Fatalf("reading test data: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestSecureBootOptionRom(t *testing.T) {
 		t.Errorf("failed to verify log: %v", err)
 	}
 
-	sbs, err := eventparse.ParseSecurebootState(events, eventparse.TPMRegisterConfig)
+	sbs, err := extract.ParseSecurebootState(events, extract.TPMRegisterConfig)
 	if err != nil {
 		t.Errorf("failed parsing secureboot state: %v", err)
 	}
@@ -181,13 +181,13 @@ func TestSecureBootOptionRom(t *testing.T) {
 	if got, want := len(sbs.DriverLoadSourceHints), 1; got != want {
 		t.Fatalf("len(sbs.DriverLoadSourceHints) = %d, want %d", got, want)
 	}
-	if got, want := sbs.DriverLoadSourceHints[0], eventparse.PciMmioSource; got != want {
+	if got, want := sbs.DriverLoadSourceHints[0], extract.PciMmioSource; got != want {
 		t.Errorf("sbs.DriverLoadSourceHints[0] = %v, want %v", got, want)
 	}
 }
 
 func TestSecureBootEventLogUbuntu(t *testing.T) {
-	data, err := os.ReadFile("../../testdata/legacydata/ubuntu_2104_shielded_vm_no_secure_boot_eventlog")
+	data, err := os.ReadFile("../testdata/legacydata/ubuntu_2104_shielded_vm_no_secure_boot_eventlog")
 	if err != nil {
 		t.Fatalf("reading test data: %v", err)
 	}
@@ -199,14 +199,14 @@ func TestSecureBootEventLogUbuntu(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verifying event log: %v", err)
 	}
-	_, err = eventparse.ParseSecurebootState(evts, eventparse.TPMRegisterConfig)
+	_, err = extract.ParseSecurebootState(evts, extract.TPMRegisterConfig)
 	if err != nil {
 		t.Errorf("parsing sb state: %v", err)
 	}
 }
 
 func TestSecureBootEventLogFedora36(t *testing.T) {
-	data, err := os.ReadFile("../../testdata/legacydata/coreos_36_shielded_vm_no_secure_boot_eventlog")
+	data, err := os.ReadFile("../testdata/legacydata/coreos_36_shielded_vm_no_secure_boot_eventlog")
 	if err != nil {
 		t.Fatalf("reading test data: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestSecureBootEventLogFedora36(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verifying event log: %v", err)
 	}
-	_, err = eventparse.ParseSecurebootState(evts, eventparse.TPMRegisterConfig)
+	_, err = extract.ParseSecurebootState(evts, extract.TPMRegisterConfig)
 	if err != nil {
 		t.Errorf("parsing sb state: %v", err)
 	}

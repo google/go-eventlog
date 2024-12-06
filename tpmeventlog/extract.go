@@ -21,7 +21,7 @@ import (
 	"errors"
 
 	"github.com/google/go-eventlog/common"
-	"github.com/google/go-eventlog/internal/eventparse"
+	"github.com/google/go-eventlog/extract"
 	pb "github.com/google/go-eventlog/proto/state"
 	"github.com/google/go-eventlog/register"
 	"github.com/google/go-eventlog/tcg"
@@ -58,15 +58,15 @@ func ExtractFirmwareLogState(rawEventLog []byte, pcrBank register.PCRBank, opts 
 		return nil, err
 	}
 
-	platform, err := eventparse.GetPlatformState(cryptoHash, events)
+	platform, err := extract.GetPlatformState(cryptoHash, events)
 	if err != nil {
 		joined = errors.Join(joined, err)
 	}
-	sbState, err := eventparse.GetSecureBootState(events, eventparse.TPMRegisterConfig)
+	sbState, err := extract.GetSecureBootState(events, extract.TPMRegisterConfig)
 	if err != nil {
 		joined = errors.Join(joined, err)
 	}
-	efiState, err := eventparse.GetEfiState(cryptoHash, events, eventparse.TPMRegisterConfig)
+	efiState, err := extract.GetEfiState(cryptoHash, events, extract.TPMRegisterConfig)
 	if err != nil {
 		joined = errors.Join(joined, err)
 	}
@@ -74,11 +74,11 @@ func ExtractFirmwareLogState(rawEventLog []byte, pcrBank register.PCRBank, opts 
 	var grub *pb.GrubState
 	var kernel *pb.LinuxKernelState
 	if opts.Loader == common.GRUB {
-		grub, err = eventparse.GetGrubStateForTPMLog(cryptoHash, events)
+		grub, err = extract.GetGrubStateForTPMLog(cryptoHash, events)
 		if err != nil {
 			joined = errors.Join(joined, err)
 		}
-		kernel, err = eventparse.GetLinuxKernelStateFromGRUB(grub)
+		kernel, err = extract.GetLinuxKernelStateFromGRUB(grub)
 		if err != nil {
 			joined = errors.Join(joined, err)
 		}

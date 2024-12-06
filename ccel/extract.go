@@ -19,7 +19,7 @@ import (
 	"fmt"
 
 	"github.com/google/go-eventlog/common"
-	"github.com/google/go-eventlog/internal/eventparse"
+	"github.com/google/go-eventlog/extract"
 	pb "github.com/google/go-eventlog/proto/state"
 	"github.com/google/go-eventlog/register"
 	"github.com/google/go-eventlog/tcg"
@@ -74,11 +74,11 @@ func ExtractFirmwareLogState(acpiTableFile []byte, rawEventLog []byte, rtmrBank 
 		3       RTMR[2]  8-15
 		4       RTMR[3]  n/a
 	*/
-	sbState, err := eventparse.GetSecureBootState(events, eventparse.RTMRRegisterConfig)
+	sbState, err := extract.GetSecureBootState(events, extract.RTMRRegisterConfig)
 	if err != nil {
 		joined = errors.Join(joined, err)
 	}
-	efiState, err := eventparse.GetEfiState(cryptoHash, events, eventparse.RTMRRegisterConfig)
+	efiState, err := extract.GetEfiState(cryptoHash, events, extract.RTMRRegisterConfig)
 
 	if err != nil {
 		joined = errors.Join(joined, err)
@@ -87,12 +87,12 @@ func ExtractFirmwareLogState(acpiTableFile []byte, rawEventLog []byte, rtmrBank 
 	var grub *pb.GrubState
 	var kernel *pb.LinuxKernelState
 	if opts.Loader == common.GRUB {
-		grub, err = eventparse.GetGrubStateForRTMRLog(cryptoHash, events, eventparse.RTMRRegisterConfig)
+		grub, err = extract.GetGrubStateForRTMRLog(cryptoHash, events, extract.RTMRRegisterConfig)
 
 		if err != nil {
 			joined = errors.Join(joined, err)
 		}
-		kernel, err = eventparse.GetLinuxKernelStateFromGRUB(grub)
+		kernel, err = extract.GetLinuxKernelStateFromGRUB(grub)
 		if err != nil {
 			joined = errors.Join(joined, err)
 		}

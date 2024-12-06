@@ -12,8 +12,8 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-// Package eventparse has tools for extracting boot and runtime information from measurements.
-package eventparse
+// Package extract has tools for extracting boot and runtime information from measurements.
+package extract
 
 import (
 	"bytes"
