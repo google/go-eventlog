@@ -11,22 +11,28 @@ import (
 
 	"github.com/google/go-eventlog/register"
 	"github.com/google/go-tpm/legacy/tpm2"
-	"github.com/google/go-tpm/tpmutil"
 )
 
 const (
 	// CEL spec 5.1
-	recnumTypeValue  uint8 = 0
-	pcrTypeValue     uint8 = 1
+	recnumTypeValue uint8 = 0
+	// PCRTypeValue indicates a PCR event index
+	PCRTypeValue     uint8 = 1
 	_                uint8 = 2 // nvindex field is not supported yet
 	digestsTypeValue uint8 = 3
+	// CCMRTypeValue indicates a RTMR event index
+	CCMRTypeValue uint8 = 108 // not in the CEL spec
 
 	tlvTypeFieldLength   int = 1
 	tlvLengthFieldLength int = 4
 
-	recnumValueLength uint32 = 8 // support up to 2^64 records
-	pcrValueLength    uint32 = 1 // support up to 256 PCRs
+	recnumValueLength   uint32 = 8 // support up to 2^64 records
+	regIndexValueLength uint32 = 1 // support up to 256 registers
 )
+
+// MRExtender extends an implementation-specific measurement register at the
+// specified bank and index with the supplied digest.
+type MRExtender func(crypto.Hash, int, []byte) error
 
 // TLV definition according to CEL spec TCG_IWG_CEL_v1_r0p37, page 16.
 // Length is implicitly defined by len(Value), using uint32 big-endian
@@ -100,10 +106,13 @@ func UnmarshalFirstTLV(buf *bytes.Buffer) (tlv TLV, err error) {
 
 // Record represents a Canonical Eventlog Record.
 type Record struct {
-	RecNum  uint64
-	PCR     uint8
-	Digests map[crypto.Hash][]byte
-	Content TLV
+	RecNum uint64
+	// Generic Measurement Register index number, register type
+	// is determined by IndexType
+	Index     uint8
+	IndexType uint8
+	Digests   map[crypto.Hash][]byte
+	Content   TLV
 }
 
 // Content is a interface for the content in CELR.
@@ -117,26 +126,32 @@ type CEL struct {
 	Records []Record
 }
 
-// AppendEvent appends a new record to the CEL.
-func (c *CEL) AppendEvent(tpm io.ReadWriteCloser, pcr int, hashAlgos []crypto.Hash, event Content) error {
-	if len(hashAlgos) == 0 {
-		return fmt.Errorf("need to specify at least one hash algorithm")
-	}
+// generateDigestMap computes hashes with the given hash algos and the given event
+func generateDigestMap(hashAlgos []crypto.Hash, event Content) (map[crypto.Hash][]byte, error) {
 	digestsMap := make(map[crypto.Hash][]byte)
-
 	for _, hashAlgo := range hashAlgos {
 		digest, err := event.GenerateDigest(hashAlgo)
 		if err != nil {
-			return err
+			return digestsMap, err
 		}
 		digestsMap[hashAlgo] = digest
+	}
+	return digestsMap, nil
+}
 
-		tpm2Alg, err := tpm2.HashToAlgorithm(hashAlgo)
-		if err != nil {
-			return err
-		}
-		if err := tpm2.PCRExtend(tpm, tpmutil.Handle(pcr), tpm2Alg, digest, ""); err != nil {
-			return fmt.Errorf("failed to extend event to PCR%d: %v", pcr, err)
+// AppendEvent appends a new MR record to the CEL.
+func (c *CEL) AppendEvent(event Content, bankAlgos []crypto.Hash, mrIndex int, extender MRExtender) error {
+	if len(bankAlgos) == 0 || mrIndex < 0 {
+		return fmt.Errorf("failed to append event with banks %v, measurement register index %v", bankAlgos, mrIndex)
+	}
+	digestMap, err := generateDigestMap(bankAlgos, event)
+	if err != nil {
+		return err
+	}
+
+	for bank, dgst := range digestMap {
+		if err := extender(bank, mrIndex, dgst); err != nil {
+			return fmt.Errorf("failed to extend event to MR%d on bank %v: %v", mrIndex, bank, err)
 		}
 	}
 
@@ -145,14 +160,15 @@ func (c *CEL) AppendEvent(tpm io.ReadWriteCloser, pcr int, hashAlgos []crypto.Ha
 		return err
 	}
 
-	celr := Record{
-		RecNum:  uint64(len(c.Records)),
-		PCR:     uint8(pcr),
-		Digests: digestsMap,
-		Content: eventTlv,
+	celrPCR := Record{
+		RecNum:    uint64(len(c.Records)),
+		Index:     uint8(mrIndex),
+		Digests:   digestMap,
+		Content:   eventTlv,
+		IndexType: PCRTypeValue,
 	}
 
-	c.Records = append(c.Records, celr)
+	c.Records = append(c.Records, celrPCR)
 	return nil
 }
 
@@ -177,24 +193,24 @@ func unmarshalRecNum(tlv TLV) (uint64, error) {
 	return binary.BigEndian.Uint64(tlv.Value), nil
 }
 
-func createPCRField(pcrNum uint8) TLV {
-	return TLV{pcrTypeValue, []byte{pcrNum}}
+func createIndexField(indexType uint8, indexNum uint8) TLV {
+	return TLV{indexType, []byte{indexNum}}
 }
 
-// UnmarshalPCR takes in a TLV with its type equals to the PCR type value (1), and
-// return its PCR number.
-func unmarshalPCR(tlv TLV) (pcrNum uint8, err error) {
-	if tlv.Type != pcrTypeValue {
-		return 0, fmt.Errorf("type of the TLV [%d] indicates it is not a PCR field [%d]",
-			tlv.Type, pcrTypeValue)
+// unmarshalIndex takes in a TLV with its type equals to the PCR or CCMR type value, and
+// return its index number.
+func unmarshalIndex(tlv TLV) (indexType uint8, pcrNum uint8, err error) {
+	if tlv.Type != PCRTypeValue && tlv.Type != CCMRTypeValue {
+		return 0, 0, fmt.Errorf("type of the TLV [%d] indicates it is not a PCR [%d] or a CCMR [%d] field ",
+			tlv.Type, PCRTypeValue, CCMRTypeValue)
 	}
-	if uint32(len(tlv.Value)) != pcrValueLength {
-		return 0, fmt.Errorf(
-			"length of the value of the TLV [%d] doesn't match the defined length [%d] of value for a PCR field",
-			len(tlv.Value), pcrValueLength)
+	if uint32(len(tlv.Value)) != regIndexValueLength {
+		return 0, 0, fmt.Errorf(
+			"length of the value of the TLV [%d] doesn't match the defined length [%d] of value for a register index field",
+			len(tlv.Value), regIndexValueLength)
 	}
 
-	return tlv.Value[0], nil
+	return tlv.Type, tlv.Value[0], nil
 }
 
 func createDigestField(digestMap map[crypto.Hash][]byte) (TLV, error) {
@@ -254,7 +270,8 @@ func (r *Record) EncodeCELR(buf *bytes.Buffer) error {
 	if err != nil {
 		return err
 	}
-	pcrField, err := createPCRField(r.PCR).MarshalBinary()
+
+	indexField, err := createIndexField(r.IndexType, r.Index).MarshalBinary()
 	if err != nil {
 		return err
 	}
@@ -274,7 +291,7 @@ func (r *Record) EncodeCELR(buf *bytes.Buffer) error {
 	if err != nil {
 		return err
 	}
-	_, err = buf.Write(pcrField)
+	_, err = buf.Write(indexField)
 	if err != nil {
 		return err
 	}
@@ -329,11 +346,11 @@ func DecodeToCELR(buf *bytes.Buffer) (r Record, err error) {
 		return Record{}, err
 	}
 
-	pcr, err := UnmarshalFirstTLV(buf)
+	regIndex, err := UnmarshalFirstTLV(buf)
 	if err != nil {
 		return Record{}, err
 	}
-	r.PCR, err = unmarshalPCR(pcr)
+	r.IndexType, r.Index, err = unmarshalIndex(regIndex)
 	if err != nil {
 		return Record{}, err
 	}
@@ -355,18 +372,18 @@ func DecodeToCELR(buf *bytes.Buffer) (r Record, err error) {
 }
 
 // Replay takes the digests from a Canonical Event Log and carries out the
-// extend sequence for each PCR in the log. It then compares the final digests
-// against a bank of PCR values to see if they match.
-func (c *CEL) Replay(bank register.PCRBank) error {
-	tpm2Alg := tpm2.Algorithm(bank.GetHash())
-	cryptoHash, err := tpm2Alg.Hash()
+// extend sequence for each register (PCR, RTMR) in the log. It then compares
+// the final digests against a bank of register values to see if they match.
+// make sure CEL has only one indexType event
+func (c *CEL) Replay(regs register.MRBank) error {
+	cryptoHash, err := regs.CryptoHash()
 	if err != nil {
 		return err
 	}
 	replayed := make(map[uint8][]byte)
 	for _, record := range c.Records {
-		if _, ok := replayed[record.PCR]; !ok {
-			replayed[record.PCR] = make([]byte, cryptoHash.Size())
+		if _, ok := replayed[record.Index]; !ok {
+			replayed[record.Index] = make([]byte, cryptoHash.Size())
 		}
 		hasher := cryptoHash.New()
 		digestsMap := record.Digests
@@ -374,27 +391,33 @@ func (c *CEL) Replay(bank register.PCRBank) error {
 		if !ok {
 			return fmt.Errorf("the CEL record did not contain a %v digest", cryptoHash)
 		}
-		hasher.Write(replayed[record.PCR])
+		hasher.Write(replayed[record.Index])
 		hasher.Write(digest)
-		replayed[record.PCR] = hasher.Sum(nil)
+		replayed[record.Index] = hasher.Sum(nil)
 	}
 
-	var failedReplayPcrs []uint8
-	for replayPcr, replayDigest := range replayed {
-		bankDigest, ok := bank.Pcrs[uint32(replayPcr)]
+	// to a map for easy matching
+	registers := make(map[int][]byte)
+	for _, r := range regs.MRs() {
+		registers[r.Idx()] = r.Dgst()
+	}
+
+	var failedReplayRegs []uint8
+	for replayReg, replayDigest := range replayed {
+		bankDigest, ok := registers[int(replayReg)]
 		if !ok {
-			return fmt.Errorf("the CEL contained record(s) for PCR%d without a matching PCR in the bank to verify", replayPcr)
+			return fmt.Errorf("the CEL contains record(s) for register %d without a matching register in the given bank to verify", replayReg)
 		}
 		if !bytes.Equal(bankDigest, replayDigest) {
-			failedReplayPcrs = append(failedReplayPcrs, replayPcr)
+			failedReplayRegs = append(failedReplayRegs, replayReg)
 		}
 	}
 
-	if len(failedReplayPcrs) == 0 {
+	if len(failedReplayRegs) == 0 {
 		return nil
 	}
 
-	return fmt.Errorf("CEL replay failed for these PCRs in bank %v: %v", cryptoHash, failedReplayPcrs)
+	return fmt.Errorf("CEL replay failed for these registers in bank %v: %v", cryptoHash, failedReplayRegs)
 }
 
 // VerifyDigests checks the digest generated by the given record's content to make sure they are equal to
