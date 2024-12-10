@@ -35,6 +35,11 @@ func GetGrubStateForTPMLog(hash crypto.Hash, events []tcg.Event) (*pb.GrubState,
 			continue
 		}
 
+		// Skip parsing EV_EVENT_TAG event since it likely comes from Linux.
+		if event.UntrustedType() == tcg.EventTag {
+			continue
+		}
+
 		if event.UntrustedType() != tcg.Ipl {
 			return nil, fmt.Errorf("invalid event type for PCR%d, expected EV_IPL", index)
 		}

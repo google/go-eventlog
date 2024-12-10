@@ -41,6 +41,10 @@ const (
 	EFIAction                  uint32 = 0x80000007
 )
 
+// EventTagLoadedImageHex used with type "EV_EVENT_TAG".
+// This corresponds to a TLV struct of type LOAD_OPTIONS_EVENT_TAG_ID (0x8F3B22ED, reversed endian), length 0x1a (26), value `LOADED_IMAGE::LoadOptions\n`.
+const EventTagLoadedImageHex = "ed223b8f1a0000004c4f414445445f494d4147453a3a4c6f61644f7074696f6e7300"
+
 var (
 	// GCENonHostInfoSignature identifies the GCE Non-Host info event, which
 	// indicates if memory encryption is enabled. This event is 32-bytes consisting

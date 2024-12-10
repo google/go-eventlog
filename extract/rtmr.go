@@ -34,6 +34,11 @@ func GetGrubStateForRTMRLog(hash crypto.Hash, events []tcg.Event, _ RegisterConf
 			continue
 		}
 
+		// Skip parsing EV_EVENT_TAG event since it likely comes from Linux.
+		if event.UntrustedType() == tcg.EventTag {
+			continue
+		}
+
 		if event.UntrustedType() != tcg.Ipl {
 			return nil, fmt.Errorf("invalid event type %v for PCR%d, expected EV_IPL", event.UntrustedType().String(), ccMRIndex)
 		}
