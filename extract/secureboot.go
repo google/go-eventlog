@@ -105,7 +105,7 @@ func ParseSecurebootStateLegacy(events []tcg.Event) (*SecurebootState, error) {
 // the state cannot be determined, or if the event log is structured
 // in such a way that it may have been tampered post-execution of
 // platform firmware.
-func ParseSecurebootState(events []tcg.Event, registerCfg RegisterConfig) (*SecurebootState, error) {
+func ParseSecurebootState(events []tcg.Event, registerCfg registerConfig) (*SecurebootState, error) {
 	var (
 		out            SecurebootState
 		seenSeparator7 bool

@@ -25,6 +25,7 @@ import (
 	pb "github.com/google/go-eventlog/proto/state"
 	"github.com/google/go-eventlog/tcg"
 	"github.com/google/go-eventlog/wellknown"
+	"github.com/google/go-tpm/legacy/tpm2"
 )
 
 var (
@@ -39,6 +40,80 @@ var (
 		oldGrubKernelCmdlinePrefix,
 		[]byte("grub_cmd ")}
 )
+
+// Bootloader refers to the second-stage bootloader that loads and transfers
+// execution to the OS kernel.
+type Bootloader int
+
+const (
+	// UnsupportedLoader refers to a second-stage bootloader that is of an
+	// unsupported type. VerifyAttestation will not parse the PC Client Event
+	// Log for bootloader events.
+	UnsupportedLoader Bootloader = iota
+	// GRUB (https://www.gnu.org/software/grub/).
+	GRUB
+)
+
+// Opts gives options for extracting information from an event log.
+type Opts struct {
+	Loader Bootloader
+}
+
+// GetFirmwareLogState extracts event info from a verified TCG PC Client event
+// log into a FirmwareLogState.
+// It returns an error on failing to parse malformed events.
+//
+// The returned FirmwareLogState may be a partial FirmwareLogState.
+// In the case of a partially filled state, err will be non-nil.
+// Callers can look for individual errors using `errors.Is`.
+//
+// It is the caller's responsibility to ensure that the passed events have
+// been replayed (e.g., using `tcg.ParseAndReplay`) against a verified measurement
+// register bank.
+func GetFirmwareLogState(events []tcg.Event, hash crypto.Hash, registerCfg registerConfig, opts Opts) (*pb.FirmwareLogState, error) {
+	var joined error
+	tcgHash, err := tpm2.HashToAlgorithm(hash)
+	if err != nil {
+		return nil, err
+	}
+
+	platform, err := registerCfg.PlatformExtracter(hash, events)
+	if err != nil {
+		joined = errors.Join(joined, err)
+	}
+	sbState, err := GetSecureBootState(events, registerCfg)
+	if err != nil {
+		joined = errors.Join(joined, err)
+	}
+	efiState, err := GetEfiState(hash, events, registerCfg)
+
+	if err != nil {
+		joined = errors.Join(joined, err)
+	}
+
+	var grub *pb.GrubState
+	var kernel *pb.LinuxKernelState
+	if opts.Loader == GRUB {
+		grub, err = registerCfg.GRUBExtracter(hash, events)
+
+		if err != nil {
+			joined = errors.Join(joined, err)
+		}
+		kernel, err = GetLinuxKernelStateFromGRUB(grub)
+		if err != nil {
+			joined = errors.Join(joined, err)
+		}
+	}
+	return &pb.FirmwareLogState{
+		Platform:    platform,
+		SecureBoot:  sbState,
+		Efi:         efiState,
+		RawEvents:   tcg.ConvertToPbEvents(hash, events),
+		Hash:        pb.HashAlgo(tcgHash),
+		Grub:        grub,
+		LinuxKernel: kernel,
+	}, joined
+}
 
 func contains(set [][]byte, value []byte) bool {
 	for _, setItem := range set {
@@ -127,7 +202,7 @@ func matchWellKnown(cert x509.Certificate) (pb.WellKnownCertificate, error) {
 
 // GetSecureBootState extracts Secure Boot information from a UEFI TCG2
 // firmware event log.
-func GetSecureBootState(replayEvents []tcg.Event, registerCfg RegisterConfig) (*pb.SecureBootState, error) {
+func GetSecureBootState(replayEvents []tcg.Event, registerCfg registerConfig) (*pb.SecureBootState, error) {
 	attestSbState, err := ParseSecurebootState(replayEvents, registerCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse SecureBootState: %v", err)
@@ -198,7 +273,7 @@ func GetPlatformState(hash crypto.Hash, events []tcg.Event) (*pb.PlatformState, 
 
 // GetEfiState extracts EFI app information from a UEFI TCG2 firmware
 // event log.
-func GetEfiState(hash crypto.Hash, events []tcg.Event, registerCfg RegisterConfig) (*pb.EfiState, error) {
+func GetEfiState(hash crypto.Hash, events []tcg.Event, registerCfg registerConfig) (*pb.EfiState, error) {
 	// We pre-compute various event digests, and check if those event type have
 	// been modified. We only trust events that come before the
 	// ExitBootServices() request.

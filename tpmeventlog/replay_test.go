@@ -23,7 +23,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-eventlog/common"
+	"github.com/google/go-eventlog/extract"
+	"github.com/google/go-eventlog/internal/testutil"
 	pb "github.com/google/go-eventlog/proto/state"
 	"github.com/google/go-eventlog/register"
 	"github.com/google/go-eventlog/testdata"
@@ -47,7 +48,7 @@ var archLinuxKnownParsingFailures = []string{
 var Rhel8GCE = eventLog{
 	RawLog: testdata.Rhel8EventLog,
 	Banks: []register.PCRBank{
-		makePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
 			0:  decodeHex("0f2d3a2a1adaa479aeeca8f5df76aadc41b862ea"),
 			1:  decodeHex("5cc549378bafaa92e965c7e9c287925cfff33abd"),
 			2:  decodeHex("b2a83b0ebf2f8374299a5b2bdfc31ea955ad7236"),
@@ -60,7 +61,7 @@ var Rhel8GCE = eventLog{
 			9:  decodeHex("25de9455ef4e8180b76bbb9bb54a82f9a73abb0a"),
 			14: decodeHex("1f5149668c40524e01be9cbc3ad527645943f148"),
 		}),
-		makePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
 			0:  decodeHex("24af52a4f429b71a3184a6d64cddad17e54ea030e2aa6576bf3a5a3d8bd3328f"),
 			1:  decodeHex("454220afaa80c83c3839f6cccd8b3c88bf4f562316a9dda1121c578c9e005a53"),
 			2:  decodeHex("3d458cfe55cc03ea1f443f1562beec8df51c75e14a9fcf9a7234a13f198e7969"),
@@ -98,7 +99,7 @@ var Rhel8GCE = eventLog{
 var UbuntuAmdSevGCE = eventLog{
 	RawLog: testdata.Ubuntu1804AmdSevEventLog,
 	Banks: []register.PCRBank{
-		makePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
 			0: decodeHex("c032c3b51dbb6f96b047421512fd4b4dfde496f3"),
 			1: decodeHex("35f38e5ce90728b02a0f66d836eef53d287e69bf"),
 			2: decodeHex("b2a83b0ebf2f8374299a5b2bdfc31ea955ad7236"),
@@ -110,7 +111,7 @@ var UbuntuAmdSevGCE = eventLog{
 			8: decodeHex("4e5533d878287970f3ef8d374fb140d93bcb2c37"),
 			9: decodeHex("1b79f2140a84462cb13d1a0c1904daefd24d7938"),
 		}),
-		makePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
 			0: decodeHex("0f35c214608d93c7a6e68ae7359b4a8be5a0e99eea9107ece427c4dea4e439cf"),
 			1: decodeHex("add81cbc06b154716ac7bd5999c84cbc520184d57c58102657d270274508d9ce"),
 			2: decodeHex("3d458cfe55cc03ea1f443f1562beec8df51c75e14a9fcf9a7234a13f198e7969"),
@@ -143,7 +144,7 @@ var UbuntuAmdSevGCE = eventLog{
 var Ubuntu2104NoDbxGCE = eventLog{
 	RawLog: testdata.Ubuntu2104NoDbxEventLog,
 	Banks: []register.PCRBank{
-		makePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
 			0:  decodeHex("0f2d3a2a1adaa479aeeca8f5df76aadc41b862ea"),
 			1:  decodeHex("36c6b7436c37243c5f6744b73ced4df1287cd16a"),
 			2:  decodeHex("b2a83b0ebf2f8374299a5b2bdfc31ea955ad7236"),
@@ -156,7 +157,7 @@ var Ubuntu2104NoDbxGCE = eventLog{
 			9:  decodeHex("f53869ab9015b5ad736e5f00e44fdfee2fdfde27"),
 			14: decodeHex("cd3734d2bdfcfba9e443ac02c03c812ffcceb255"),
 		}),
-		makePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
 			0:  decodeHex("24af52a4f429b71a3184a6d64cddad17e54ea030e2aa6576bf3a5a3d8bd3328f"),
 			1:  decodeHex("f7dab5fda6b082e0ec1a12c43dd996ee409111422cda752a784620313039db19"),
 			2:  decodeHex("3d458cfe55cc03ea1f443f1562beec8df51c75e14a9fcf9a7234a13f198e7969"),
@@ -190,7 +191,7 @@ var Ubuntu2104NoDbxGCE = eventLog{
 var Ubuntu2104NoSecureBootGCE = eventLog{
 	RawLog: testdata.Ubuntu2104NoSecureBootEventLog,
 	Banks: []register.PCRBank{
-		makePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
 			0:  decodeHex("0f2d3a2a1adaa479aeeca8f5df76aadc41b862ea"),
 			1:  decodeHex("f5310dfcfcec5571cbf730064d526906c9cea2f0"),
 			2:  decodeHex("b2a83b0ebf2f8374299a5b2bdfc31ea955ad7236"),
@@ -203,7 +204,7 @@ var Ubuntu2104NoSecureBootGCE = eventLog{
 			9:  decodeHex("39fd49224476f4d7eea26a53e264c9c33e47649c"),
 			14: decodeHex("cd3734d2bdfcfba9e443ac02c03c812ffcceb255"),
 		}),
-		makePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
 			0:  decodeHex("24af52a4f429b71a3184a6d64cddad17e54ea030e2aa6576bf3a5a3d8bd3328f"),
 			1:  decodeHex("45ed8540f34db53220ef197e5fb8a3835b2095454349e445f397f13d91c509a5"),
 			2:  decodeHex("3d458cfe55cc03ea1f443f1562beec8df51c75e14a9fcf9a7234a13f198e7969"),
@@ -237,7 +238,7 @@ var Ubuntu2104NoSecureBootGCE = eventLog{
 var Ubuntu2404AmdSevSnp = eventLog{
 	RawLog: testdata.Ubuntu2404AmdSevSnpEventLog,
 	Banks: []register.PCRBank{
-		makePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
 			0:  decodeHex("8124f09f069c7d2d9acf5ce4eab928a7103a0bb2"),
 			1:  decodeHex("f00d6bbdea9ba55996f237a7f95f2b328a44e3f2"),
 			2:  decodeHex("b2a83b0ebf2f8374299a5b2bdfc31ea955ad7236"),
@@ -250,7 +251,7 @@ var Ubuntu2404AmdSevSnp = eventLog{
 			9:  decodeHex("c6ee69063ab752df6c4ab99a80b12f3e5c432535"),
 			14: decodeHex("a482a15e112717d6a915b989a0ea6140a507e3e6"),
 		}),
-		makePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
 			0:  decodeHex("50597a27846e91d025eef597abbc89f72bff9af849094db97b0684d8bc4c515e"),
 			1:  decodeHex("57344e1cc8c6619413df33013a7cd67915459f967395af41db21c1fa7ca9c307"),
 			2:  decodeHex("3d458cfe55cc03ea1f443f1562beec8df51c75e14a9fcf9a7234a13f198e7969"),
@@ -284,7 +285,7 @@ var Ubuntu2404AmdSevSnp = eventLog{
 var GlinuxNoSecureBootLaptop = eventLog{
 	RawLog: testdata.GlinuxAlexEventLog,
 	Banks: []register.PCRBank{
-		makePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
 			0: decodeHex("29d236609a5f9cc6912af44ba5f57b13a17c8a84"),
 			1: decodeHex("db16852a369b2503d6cc6c0007501c837dbe1170"),
 			2: decodeHex("0c8ef58d40b8cd1fe15f6b45fc1b385dd251eec0"),
@@ -294,7 +295,7 @@ var GlinuxNoSecureBootLaptop = eventLog{
 			6: decodeHex("b2a83b0ebf2f8374299a5b2bdfc31ea955ad7236"),
 			7: decodeHex("9221b8fc57b60cb7de507dc016f88d4600cde9c5"),
 		}),
-		makePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
 			0: decodeHex("0e5ea849d7647a1ac1becc096fee4df98f00f8015f934afadaab0b8aa20b38a5"),
 			1: decodeHex("9750400838980c9419764b9cf19c975c0e159c18ebe21cb897c6e834a8d8d433"),
 			2: decodeHex("970096d49105b0404999173e49c3f6b8597b9c4c5ff6a9e364b55ce01037578e"),
@@ -311,7 +312,7 @@ var GlinuxNoSecureBootLaptop = eventLog{
 var ArchLinuxWorkstation = eventLog{
 	RawLog: testdata.ArchLinuxWorkstationEventLog,
 	Banks: []register.PCRBank{
-		makePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
 			0: decodeHex("a0487b0d95387d4a30560edf5f041307bf4a1dcc"),
 			1: decodeHex("56b71c334a5b67d3b7b3343e3241dff5a1ad87bf"),
 			2: decodeHex("01098a68e44e4fbd0af3b9a836b1b79e78c4f6f5"),
@@ -322,7 +323,7 @@ var ArchLinuxWorkstation = eventLog{
 			7: decodeHex("029c700c2fa2bc83cbf3ce4ee501ad4d984ec5ae"),
 			8: decodeHex("aa99fc93faa0777f42da6e1ae77a0653b5005619"),
 		}),
-		makePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
 			0: decodeHex("758b773d94feabf52ef5a4c00a7ad2c80d8d6e6d9d58756150be9bc973da9087"),
 			1: decodeHex("bfda688a5d320123fddb3fc70b746bc17647e2e7f2f96e130d429542bf4622d5"),
 			2: decodeHex("65dee4a48cde677aa89fa83c5c35e883fda658f743853e3ebad504ca6702f7c5"),
@@ -340,7 +341,7 @@ var ArchLinuxWorkstation = eventLog{
 var Debian10GCE = eventLog{
 	RawLog: testdata.Debian10EventLog,
 	Banks: []register.PCRBank{
-		makePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
 			0: decodeHex("0f2d3a2a1adaa479aeeca8f5df76aadc41b862ea"),
 			1: decodeHex("b1676439cac1531683990fefe2218a43239d6fe8"),
 			2: decodeHex("b2a83b0ebf2f8374299a5b2bdfc31ea955ad7236"),
@@ -367,7 +368,7 @@ var Debian10GCE = eventLog{
 var COS85AmdSev = eventLog{
 	RawLog: testdata.Cos85AmdSevEventLog,
 	Banks: []register.PCRBank{
-		makePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
 			0: decodeHex("c032c3b51dbb6f96b047421512fd4b4dfde496f3"),
 			1: decodeHex("e3e9e1d9deacd95b289bbbd3a1717a57af7d211b"),
 			2: decodeHex("b2a83b0ebf2f8374299a5b2bdfc31ea955ad7236"),
@@ -379,7 +380,7 @@ var COS85AmdSev = eventLog{
 			8: decodeHex("72778b0ba3c491db25eb7c8368cb1fb51f0ce458"),
 			9: decodeHex("08bd04f0dbadf591510340d94a0019c0ddcb779f"),
 		}),
-		makePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
 			0: decodeHex("0f35c214608d93c7a6e68ae7359b4a8be5a0e99eea9107ece427c4dea4e439cf"),
 			1: decodeHex("6eb40f5b6bfafcb9914d486ce59404acd24bc13a6a3c45cda3b44c9d7053d638"),
 			2: decodeHex("3d458cfe55cc03ea1f443f1562beec8df51c75e14a9fcf9a7234a13f198e7969"),
@@ -414,7 +415,7 @@ var COS85AmdSev = eventLog{
 var COS93AmdSev = eventLog{
 	RawLog: testdata.Cos93AmdSevEventLog,
 	Banks: []register.PCRBank{
-		makePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
 			0: decodeHex("c032c3b51dbb6f96b047421512fd4b4dfde496f3"),
 			1: decodeHex("e3e9e1d9deacd95b289bbbd3a1717a57af7d211b"),
 			2: decodeHex("b2a83b0ebf2f8374299a5b2bdfc31ea955ad7236"),
@@ -426,7 +427,7 @@ var COS93AmdSev = eventLog{
 			8: decodeHex("ec84952e0c5c96cd4404122131b8f86d5ac7df7d"),
 			9: decodeHex("7a406f847075a86a55aa184cfe3fcef7eaff40a7"),
 		}),
-		makePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
 			0: decodeHex("0f35c214608d93c7a6e68ae7359b4a8be5a0e99eea9107ece427c4dea4e439cf"),
 			1: decodeHex("6eb40f5b6bfafcb9914d486ce59404acd24bc13a6a3c45cda3b44c9d7053d638"),
 			2: decodeHex("3d458cfe55cc03ea1f443f1562beec8df51c75e14a9fcf9a7234a13f198e7969"),
@@ -461,7 +462,7 @@ var COS93AmdSev = eventLog{
 var COS101AmdSev = eventLog{
 	RawLog: testdata.Cos101AmdSevEventLog,
 	Banks: []register.PCRBank{
-		makePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
 			0:  decodeHex("c032c3b51dbb6f96b047421512fd4b4dfde496f3"),
 			1:  decodeHex("e3e9e1d9deacd95b289bbbd3a1717a57af7d211b"),
 			2:  decodeHex("b2a83b0ebf2f8374299a5b2bdfc31ea955ad7236"),
@@ -474,7 +475,7 @@ var COS101AmdSev = eventLog{
 			9:  decodeHex("fbbb8a8f120369810e7e161504556f0080afadac"),
 			14: decodeHex("1ba610b2d80967338649a8f88f45810448814bfc"),
 		}),
-		makePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
+		testutil.MakePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
 			0:  decodeHex("0f35c214608d93c7a6e68ae7359b4a8be5a0e99eea9107ece427c4dea4e439cf"),
 			1:  decodeHex("6eb40f5b6bfafcb9914d486ce59404acd24bc13a6a3c45cda3b44c9d7053d638"),
 			2:  decodeHex("3d458cfe55cc03ea1f443f1562beec8df51c75e14a9fcf9a7234a13f198e7969"),
@@ -515,25 +516,25 @@ func TestParseEventLogs(t *testing.T) {
 	logs := []struct {
 		eventLog
 		name string
-		common.Bootloader
+		extract.Bootloader
 		// This field handles known issues with event log parsing or bad event
 		// logs.
 		// Set to nil when the event log has no known issues.
 		knownErrs []string
 	}{
-		{Debian10GCE, "Debian10GCE", common.UnsupportedLoader, nil},
-		{Rhel8GCE, "Rhel8GCE", common.GRUB, nil},
-		{UbuntuAmdSevGCE, "UbuntuAmdSevGCE", common.GRUB, nil},
+		{Debian10GCE, "Debian10GCE", extract.UnsupportedLoader, nil},
+		{Rhel8GCE, "Rhel8GCE", extract.GRUB, nil},
+		{UbuntuAmdSevGCE, "UbuntuAmdSevGCE", extract.GRUB, nil},
 		// TODO: remove once the fix is pulled in
 		// https://github.com/google/go-attestation/pull/222
-		{Ubuntu2104NoDbxGCE, "Ubuntu2104NoDbxGCE", common.GRUB, []string{sbatErrorStr}},
-		{Ubuntu2104NoSecureBootGCE, "Ubuntu2104NoSecureBootGCE", common.GRUB, []string{sbatErrorStr}},
-		{Ubuntu2404AmdSevSnp, "Ubuntu2404AmdSevSnp", common.GRUB, nil},
+		{Ubuntu2104NoDbxGCE, "Ubuntu2104NoDbxGCE", extract.GRUB, []string{sbatErrorStr}},
+		{Ubuntu2104NoSecureBootGCE, "Ubuntu2104NoSecureBootGCE", extract.GRUB, []string{sbatErrorStr}},
+		{Ubuntu2404AmdSevSnp, "Ubuntu2404AmdSevSnp", extract.GRUB, nil},
 		// This event log has a SecureBoot variable length of 0.
-		{ArchLinuxWorkstation, "ArchLinuxWorkstation", common.UnsupportedLoader, archLinuxKnownParsingFailures},
-		{COS85AmdSev, "COS85AmdSev", common.GRUB, nil},
-		{COS93AmdSev, "COS93AmdSev", common.GRUB, nil},
-		{COS101AmdSev, "COS101AmdSev", common.GRUB, nil},
+		{ArchLinuxWorkstation, "ArchLinuxWorkstation", extract.UnsupportedLoader, archLinuxKnownParsingFailures},
+		{COS85AmdSev, "COS85AmdSev", extract.GRUB, nil},
+		{COS93AmdSev, "COS93AmdSev", extract.GRUB, nil},
+		{COS101AmdSev, "COS101AmdSev", extract.GRUB, nil},
 	}
 
 	for _, log := range logs {
@@ -542,7 +543,7 @@ func TestParseEventLogs(t *testing.T) {
 			hashName := pb.HashAlgo_name[int32(bank.TCGHashAlgo)]
 			subtestName := fmt.Sprintf("%s-%s", log.name, hashName)
 			t.Run(subtestName, func(t *testing.T) {
-				if _, err := ExtractFirmwareLogState(rawLog, bank, ExtractOpts{Loader: log.Bootloader}); err != nil {
+				if _, err := ReplayAndExtract(rawLog, bank, extract.Opts{Loader: log.Bootloader}); err != nil {
 					for _, knownErr := range log.knownErrs {
 						if !strings.Contains(err.Error(), knownErr) {
 							t.Errorf("failed to extract log state: %v", err)
@@ -557,9 +558,9 @@ func TestParseEventLogs(t *testing.T) {
 func TestParseMachineStateReplayFail(t *testing.T) {
 	pcrMap := make(map[uint32][]byte)
 	pcrMap[0] = []byte{0, 0, 0, 0}
-	badPCRBank := makePCRBank(pb.HashAlgo_SHA1, pcrMap)
+	badPCRBank := testutil.MakePCRBank(pb.HashAlgo_SHA1, pcrMap)
 
-	_, err := ExtractFirmwareLogState(Debian10GCE.RawLog, badPCRBank, ExtractOpts{})
+	_, err := ReplayAndExtract(Debian10GCE.RawLog, badPCRBank, extract.Opts{})
 	if err == nil {
 		t.Errorf("ParseMachineState should fail to replay the event log")
 	}
@@ -580,7 +581,7 @@ func TestEmptyEventlog(t *testing.T) {
 	for i := uint32(0); i < 24; i++ {
 		zeroPCRs[i] = zeroDigest
 	}
-	zeroBank := makePCRBank(pb.HashAlgo_SHA1, zeroPCRs)
+	zeroBank := testutil.MakePCRBank(pb.HashAlgo_SHA1, zeroPCRs)
 
 	realBank := UbuntuAmdSevGCE.Banks[0]
 	cases := []struct {
@@ -593,7 +594,7 @@ func TestEmptyEventlog(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			state, err := ExtractFirmwareLogState(emptyLog, c.bank, ExtractOpts{})
+			state, err := ReplayAndExtract(emptyLog, c.bank, extract.Opts{})
 			if err != nil {
 				t.Errorf("parsing empty eventlog: %v", err)
 			}
@@ -606,7 +607,7 @@ func TestEmptyEventlog(t *testing.T) {
 
 func TestParseSecureBootState(t *testing.T) {
 	for _, bank := range UbuntuAmdSevGCE.Banks {
-		msState, err := ExtractFirmwareLogState(UbuntuAmdSevGCE.RawLog, bank, ExtractOpts{})
+		msState, err := ReplayAndExtract(UbuntuAmdSevGCE.RawLog, bank, extract.Opts{})
 		if err != nil {
 			t.Errorf("failed to parse and replay log: %v", err)
 		}
@@ -650,7 +651,7 @@ func TestParseLinuxKernelState(t *testing.T) {
 			hashName := pb.HashAlgo_name[int32(bank.TCGHashAlgo)]
 			subtestName := fmt.Sprintf("%s-%s", log.name, hashName)
 			t.Run(subtestName, func(t *testing.T) {
-				msState, err := ExtractFirmwareLogState(log.RawLog, bank, ExtractOpts{Loader: common.GRUB})
+				msState, err := ReplayAndExtract(log.RawLog, bank, extract.Opts{Loader: extract.GRUB})
 				if err != nil {
 					t.Errorf("failed to parse and replay log: %v", err)
 				}
@@ -685,7 +686,7 @@ func TestParseGRUBState(t *testing.T) {
 			hashName := pb.HashAlgo_name[int32(bank.TCGHashAlgo)]
 			subtestName := fmt.Sprintf("%s-%s", log.name, hashName)
 			t.Run(subtestName, func(t *testing.T) {
-				msState, err := ExtractFirmwareLogState(log.RawLog, bank, ExtractOpts{Loader: common.GRUB})
+				msState, err := ReplayAndExtract(log.RawLog, bank, extract.Opts{Loader: extract.GRUB})
 				if err != nil {
 					t.Errorf("failed to parse and replay log: %v", err)
 				}
@@ -714,7 +715,7 @@ func TestParseGRUBStateFail(t *testing.T) {
 		hashName := pb.HashAlgo_name[int32(bank.TCGHashAlgo)]
 		subtestName := fmt.Sprintf("GlinuxNoSecureBootLaptop-%s", hashName)
 		t.Run(subtestName, func(t *testing.T) {
-			_, err := ExtractFirmwareLogState(eventlog.RawLog, bank, ExtractOpts{Loader: common.GRUB})
+			_, err := ReplayAndExtract(eventlog.RawLog, bank, extract.Opts{Loader: extract.GRUB})
 			if err == nil {
 				t.Error("expected error when parsing GRUB state")
 			}
@@ -742,7 +743,7 @@ func TestParseEfiState(t *testing.T) {
 			hashName := pb.HashAlgo_name[int32(bank.TCGHashAlgo)]
 			subtestName := fmt.Sprintf("%s-%s", log.name, hashName)
 			t.Run(subtestName, func(t *testing.T) {
-				msState, err := ExtractFirmwareLogState(log.RawLog, bank, ExtractOpts{})
+				msState, err := ReplayAndExtract(log.RawLog, bank, extract.Opts{})
 				if err != nil {
 					t.Errorf("parsePCClientEventLog(%v, %v) got err = %v, want nil", log.name, bank.TCGHashAlgo.String(), err)
 				}
@@ -780,23 +781,4 @@ func decodeHex(hexStr string) []byte {
 		panic(err)
 	}
 	return bytes
-}
-
-func makePCRBank(hashAlgo pb.HashAlgo, pcrIdxToDigest map[uint32][]byte) register.PCRBank {
-	pcrs := make([]register.PCR, 0, len(pcrIdxToDigest))
-	digestAlg, err := hashAlgo.CryptoHash()
-	if err != nil {
-		panic(err)
-	}
-	for pcrIdx, digest := range pcrIdxToDigest {
-		pcrs = append(pcrs, register.PCR{
-			Index:     int(pcrIdx),
-			Digest:    digest,
-			DigestAlg: digestAlg,
-		})
-	}
-	return register.PCRBank{
-		TCGHashAlgo: hashAlgo,
-		PCRs:        pcrs,
-	}
 }

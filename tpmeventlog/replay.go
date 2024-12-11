@@ -18,25 +18,16 @@
 package tpmeventlog
 
 import (
-	"errors"
-
-	"github.com/google/go-eventlog/common"
 	"github.com/google/go-eventlog/extract"
 	pb "github.com/google/go-eventlog/proto/state"
 	"github.com/google/go-eventlog/register"
 	"github.com/google/go-eventlog/tcg"
 )
 
-// ExtractOpts gives options for extracting information from an event log.
-type ExtractOpts struct {
-	Loader common.Bootloader
-}
-
-// ExtractFirmwareLogState parses a PC Client event log and replays the parsed
+// ReplayAndExtract parses a PC Client event log and replays the parsed
 // event log against the PCR bank specified by hash.
 //
-// It returns the corresponding FirmwareLogState containing the events verified
-// by particular PCR indexes/digests.
+// It then extracts event info from the verified log into a FirmwareLogState.
 // It returns an error on failing to replay the events against the PCR bank or
 // on failing to parse malformed events.
 //
@@ -47,8 +38,7 @@ type ExtractOpts struct {
 // It is the caller's responsibility to ensure that the passed PCR values can be
 // trusted. Users can establish trust in PCR values by either calling
 // client.ReadPCRs() themselves or by verifying the values via a PCR quote.
-func ExtractFirmwareLogState(rawEventLog []byte, pcrBank register.PCRBank, opts ExtractOpts) (*pb.FirmwareLogState, error) {
-	var err, joined error
+func ReplayAndExtract(rawEventLog []byte, pcrBank register.PCRBank, opts extract.Opts) (*pb.FirmwareLogState, error) {
 	cryptoHash, err := pcrBank.CryptoHash()
 	if err != nil {
 		return &pb.FirmwareLogState{}, err
@@ -58,38 +48,5 @@ func ExtractFirmwareLogState(rawEventLog []byte, pcrBank register.PCRBank, opts 
 		return nil, err
 	}
 
-	platform, err := extract.GetPlatformState(cryptoHash, events)
-	if err != nil {
-		joined = errors.Join(joined, err)
-	}
-	sbState, err := extract.GetSecureBootState(events, extract.TPMRegisterConfig)
-	if err != nil {
-		joined = errors.Join(joined, err)
-	}
-	efiState, err := extract.GetEfiState(cryptoHash, events, extract.TPMRegisterConfig)
-	if err != nil {
-		joined = errors.Join(joined, err)
-	}
-
-	var grub *pb.GrubState
-	var kernel *pb.LinuxKernelState
-	if opts.Loader == common.GRUB {
-		grub, err = extract.GetGrubStateForTPMLog(cryptoHash, events)
-		if err != nil {
-			joined = errors.Join(joined, err)
-		}
-		kernel, err = extract.GetLinuxKernelStateFromGRUB(grub)
-		if err != nil {
-			joined = errors.Join(joined, err)
-		}
-	}
-	return &pb.FirmwareLogState{
-		Platform:    platform,
-		SecureBoot:  sbState,
-		Efi:         efiState,
-		RawEvents:   tcg.ConvertToPbEvents(cryptoHash, events),
-		Hash:        pcrBank.TCGHashAlgo,
-		Grub:        grub,
-		LinuxKernel: kernel,
-	}, joined
+	return extract.GetFirmwareLogState(events, cryptoHash, extract.TPMRegisterConfig, opts)
 }

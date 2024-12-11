@@ -26,7 +26,7 @@ import (
 )
 
 // GetGrubStateForRTMRLog extracts GRUB commands from RTMR2.
-func GetGrubStateForRTMRLog(hash crypto.Hash, events []tcg.Event, _ RegisterConfig) (*pb.GrubState, error) {
+func GetGrubStateForRTMRLog(hash crypto.Hash, events []tcg.Event) (*pb.GrubState, error) {
 	var commands []string
 	for eventNum, event := range events {
 		ccMRIndex := event.MRIndex()
@@ -62,7 +62,7 @@ func GetGrubStateForRTMRLog(hash crypto.Hash, events []tcg.Event, _ RegisterConf
 			hasher.Reset()
 			hasher.Write(rawData[suffixAt:])
 			if !bytes.Equal(event.ReplayedDigest(), hasher.Sum(nil)) {
-				return nil, fmt.Errorf("invalid digest seen for GRthe UB event log in event %d: %s", eventNum, hex.EncodeToString(event.ReplayedDigest()))
+				return nil, fmt.Errorf("invalid digest seen for GRUB event %d: %s", eventNum, hex.EncodeToString(event.ReplayedDigest()))
 			}
 		}
 		hasher.Reset()

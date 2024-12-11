@@ -19,11 +19,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-eventlog/common"
+	"github.com/google/go-eventlog/extract"
 	"github.com/google/go-eventlog/register"
 )
 
-func TestExtractFirmwareLogState(t *testing.T) {
+func TestReplayAndExtract(t *testing.T) {
 	elBytes, err := os.ReadFile("../testdata/eventlogs/ccel/cos-113-intel-tdx.bin")
 	if err != nil {
 		t.Fatal(err)
@@ -41,13 +41,13 @@ func TestExtractFirmwareLogState(t *testing.T) {
 		{Index: 1, Digest: rtmr1},
 		{Index: 2, Digest: rtmr2},
 	}}
-	_, err = ExtractFirmwareLogState(tableBytes, elBytes, bank, ExtractOpts{Loader: common.GRUB})
+	_, err = ReplayAndExtract(tableBytes, elBytes, bank, extract.Opts{Loader: extract.GRUB})
 	if err != nil {
-		t.Errorf("failed to extract FirmwareLogState from CCEL: %v", err)
+		t.Errorf("failed to ReplayAndExtract from CCEL: %v", err)
 	}
 }
 
-func TestExtractFirmwareLogStateFailDuplicateSeparator(t *testing.T) {
+func TestReplayAndExtractFailDuplicateSeparator(t *testing.T) {
 	badELWithUEFIBug, err := os.ReadFile("../testdata/eventlogs/ccel/cos-113-intel-tdx-dupe-separator.bin")
 	if err != nil {
 		t.Fatal(err)
@@ -66,8 +66,8 @@ func TestExtractFirmwareLogStateFailDuplicateSeparator(t *testing.T) {
 		{Index: 1, Digest: rtmr1},
 		{Index: 2, Digest: rtmr2},
 	}}
-	_, err = ExtractFirmwareLogState(tableBytes, badELWithUEFIBug, bank, ExtractOpts{Loader: common.GRUB})
+	_, err = ReplayAndExtract(tableBytes, badELWithUEFIBug, bank, extract.Opts{Loader: extract.GRUB})
 	if err == nil || !strings.Contains(err.Error(), "duplicate separator at event") {
-		t.Errorf("ExtractFirmwareLogState(badELWithUEFIBug): got %v, expected error with duplicate separator message", err)
+		t.Errorf("ReplayAndExtract(badELWithUEFIBug): got %v, expected error with duplicate separator message", err)
 	}
 }

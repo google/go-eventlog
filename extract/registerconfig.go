@@ -15,14 +15,17 @@
 package extract
 
 import (
+	"crypto"
+
+	pb "github.com/google/go-eventlog/proto/state"
 	"github.com/google/go-eventlog/tcg"
 )
 
-// RegisterConfig contains the measurement register technology-specific indexes
+// registerConfig contains the measurement register technology-specific indexes
 // expected to contain the events corresponding to various states, like EFI
 // and Secure Boot states.
 // This uses the event log-encoded index, e.g., PCR or CC MR (not RTMR).
-type RegisterConfig struct {
+type registerConfig struct {
 	Name                          string
 	FirmwareDriverIdx             uint32
 	SecureBootIdx                 uint32
@@ -30,12 +33,14 @@ type RegisterConfig struct {
 	ExitBootServicesIdx           uint32
 	GRUBCmdIdx                    uint32
 	GRUBFileIdx                   uint32
+	GRUBExtracter                 func(crypto.Hash, []tcg.Event) (*pb.GrubState, error)
+	PlatformExtracter             func(crypto.Hash, []tcg.Event) (*pb.PlatformState, error)
 	AdditionalSecureBootIdxEvents map[tcg.EventType]bool
 }
 
 // TPMRegisterConfig configures the expected indexes and event types for
 // TPM-based event logs.
-var TPMRegisterConfig = RegisterConfig{
+var TPMRegisterConfig = registerConfig{
 	Name:                "PCR",
 	FirmwareDriverIdx:   2,
 	SecureBootIdx:       7,
@@ -43,6 +48,8 @@ var TPMRegisterConfig = RegisterConfig{
 	ExitBootServicesIdx: 5,
 	GRUBCmdIdx:          8,
 	GRUBFileIdx:         9,
+	GRUBExtracter:       GetGrubStateForTPMLog,
+	PlatformExtracter:   GetPlatformState,
 	// AdditionalSecureBootIdxEvents is empty since
 	// eventparse.ParseSecurebootState encodes all the current allowable types
 	// for PCR 7.
@@ -50,7 +57,7 @@ var TPMRegisterConfig = RegisterConfig{
 
 // RTMRRegisterConfig configures the expected indexes and event types for
 // RTMR-based event logs.
-var RTMRRegisterConfig = RegisterConfig{
+var RTMRRegisterConfig = registerConfig{
 	Name: "RTMR",
 	// CCMR2=RTMR[1]=PCR[2]
 	FirmwareDriverIdx: 2,
@@ -63,7 +70,11 @@ var RTMRRegisterConfig = RegisterConfig{
 	// CCMR3=RTMR[2]=PCR[8]
 	GRUBCmdIdx: 3,
 	// CCMR3=RTMR[2]=PCR[9]
-	GRUBFileIdx: 3,
+	GRUBFileIdx:   3,
+	GRUBExtracter: GetGrubStateForRTMRLog,
+	PlatformExtracter: func(_ crypto.Hash, _ []tcg.Event) (*pb.PlatformState, error) {
+		return &pb.PlatformState{Technology: pb.GCEConfidentialTechnology_INTEL_TDX}, nil
+	},
 	// RTMR[0] maps to both PCR[1] and PCR[7].
 	// Pulled from "Table 27 Events" in
 	// "TCG PC Client Platform Firmware Profile Specification"
