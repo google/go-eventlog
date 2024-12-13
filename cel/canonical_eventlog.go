@@ -13,15 +13,25 @@ import (
 	"github.com/google/go-tpm/legacy/tpm2"
 )
 
+// TopLevelEventType represents the CEL spec's known CELR data types for TPMS_CEL_EVENT.
+type TopLevelEventType uint8
+
+// MRType represents the type of measurement register used in the CEL for field
+// CEL_PCR_NVindex TLV.
+type MRType TopLevelEventType
+
 const (
 	// CEL spec 5.1
-	recnumTypeValue uint8 = 0
-	// PCRTypeValue indicates a PCR event index
-	PCRTypeValue     uint8 = 1
-	_                uint8 = 2 // nvindex field is not supported yet
-	digestsTypeValue uint8 = 3
-	// CCMRTypeValue indicates a RTMR event index
-	CCMRTypeValue uint8 = 108 // not in the CEL spec
+	recnumTypeValue TopLevelEventType = 0
+
+	// PCRType indicates a PCR event index
+	PCRType MRType = 1
+	// NV Indexes are unsupported.
+	_ MRType = 2
+	// CCMRType indicates a RTMR event index
+	CCMRType MRType = 108
+
+	digestsTypeValue TopLevelEventType = 3
 
 	tlvTypeFieldLength   int = 1
 	tlvLengthFieldLength int = 4
@@ -66,9 +76,9 @@ func (t *TLV) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-// UnmarshalFirstTLV reads and parse the first TLV from the bytes buffer. The function will
+// unmarshalFirstTLV reads and parse the first TLV from the bytes buffer. The function will
 // return io.EOF if the buf ends unexpectedly or cannot fill the TLV.
-func UnmarshalFirstTLV(buf *bytes.Buffer) (tlv TLV, err error) {
+func unmarshalFirstTLV(buf *bytes.Buffer) (tlv TLV, err error) {
 	typeByte, err := buf.ReadByte()
 	if err != nil {
 		return tlv, err
@@ -121,9 +131,35 @@ type Content interface {
 	GetTLV() (TLV, error)
 }
 
-// CEL represents a Canonical Eventlog, which contains a list of Records.
-type CEL struct {
-	Records []Record
+// CEL represents a Canonical Event Log, which contains a list of Records.
+type CEL interface {
+	// Records returns all the records in the CEL.
+	Records() []Record
+	// AppendEvent appends a new record to the CEL.
+	AppendEvent(Content, []crypto.Hash, int, MRExtender) error
+	// EncodeCEL returns the TLV encoding of the CEL.
+	EncodeCEL(*bytes.Buffer) error
+	// Replay verifies the contents of the event log with the given MR bank.
+	Replay(register.MRBank) error
+	// MRType returns the measurement register type used in the CEL.
+	MRType() MRType
+}
+
+// eventLog represents a Canonical Event Log, which contains a list of Records.
+type eventLog struct {
+	Recs []Record
+	Type MRType
+}
+
+// NewPCR returns a CEL with events measured in TPM PCRs.
+func NewPCR() CEL {
+	return &eventLog{Type: PCRType}
+}
+
+// NewConfComputeMR returns a CEL with events measured in confidential
+// computing measurement registers.
+func NewConfComputeMR() CEL {
+	return &eventLog{Type: CCMRType}
 }
 
 // generateDigestMap computes hashes with the given hash algos and the given event
@@ -140,10 +176,14 @@ func generateDigestMap(hashAlgos []crypto.Hash, event Content) (map[crypto.Hash]
 }
 
 // AppendEvent appends a new MR record to the CEL.
-func (c *CEL) AppendEvent(event Content, bankAlgos []crypto.Hash, mrIndex int, extender MRExtender) error {
+func (c *eventLog) AppendEvent(event Content, bankAlgos []crypto.Hash, mrIndex int, extender MRExtender) error {
 	if len(bankAlgos) == 0 || mrIndex < 0 {
 		return fmt.Errorf("failed to append event with banks %v, measurement register index %v", bankAlgos, mrIndex)
 	}
+	if err := supportedMRType(c.Type); err != nil {
+		return err
+	}
+
 	digestMap, err := generateDigestMap(bankAlgos, event)
 	if err != nil {
 		return err
@@ -161,27 +201,34 @@ func (c *CEL) AppendEvent(event Content, bankAlgos []crypto.Hash, mrIndex int, e
 	}
 
 	celrPCR := Record{
-		RecNum:    uint64(len(c.Records)),
+		RecNum:    uint64(len(c.Recs)),
 		Index:     uint8(mrIndex),
 		Digests:   digestMap,
 		Content:   eventTlv,
-		IndexType: PCRTypeValue,
+		IndexType: uint8(c.Type),
 	}
 
-	c.Records = append(c.Records, celrPCR)
+	c.Recs = append(c.Recs, celrPCR)
+	return nil
+}
+
+func supportedMRType(mrType MRType) error {
+	if mrType != PCRType && mrType != CCMRType {
+		return fmt.Errorf("received unknown type of measurement register: %d", mrType)
+	}
 	return nil
 }
 
 func createRecNumField(recNum uint64) TLV {
 	value := make([]byte, recnumValueLength)
 	binary.BigEndian.PutUint64(value, recNum)
-	return TLV{recnumTypeValue, value}
+	return TLV{uint8(recnumTypeValue), value}
 }
 
 // UnmarshalRecNum takes in a TLV with its type equals to the recnum type value (0), and
 // return its record number.
 func unmarshalRecNum(tlv TLV) (uint64, error) {
-	if tlv.Type != recnumTypeValue {
+	if tlv.Type != uint8(recnumTypeValue) {
 		return 0, fmt.Errorf("type of the TLV [%d] indicates it is not a recnum field [%d]",
 			tlv.Type, recnumTypeValue)
 	}
@@ -200,9 +247,9 @@ func createIndexField(indexType uint8, indexNum uint8) TLV {
 // unmarshalIndex takes in a TLV with its type equals to the PCR or CCMR type value, and
 // return its index number.
 func unmarshalIndex(tlv TLV) (indexType uint8, pcrNum uint8, err error) {
-	if tlv.Type != PCRTypeValue && tlv.Type != CCMRTypeValue {
+	if tlv.Type != uint8(PCRType) && tlv.Type != uint8(CCMRType) {
 		return 0, 0, fmt.Errorf("type of the TLV [%d] indicates it is not a PCR [%d] or a CCMR [%d] field ",
-			tlv.Type, PCRTypeValue, CCMRTypeValue)
+			tlv.Type, uint8(PCRType), uint8(CCMRType))
 	}
 	if uint32(len(tlv.Value)) != regIndexValueLength {
 		return 0, 0, fmt.Errorf(
@@ -234,13 +281,13 @@ func createDigestField(digestMap map[crypto.Hash][]byte) (TLV, error) {
 			return TLV{}, err
 		}
 	}
-	return TLV{digestsTypeValue, buf.Bytes()}, nil
+	return TLV{uint8(digestsTypeValue), buf.Bytes()}, nil
 }
 
 // UnmarshalDigests takes in a TLV with its type equals to the digests type value (3), and
 // return its digests content in a map, the key is its TPM hash algorithm.
 func unmarshalDigests(tlv TLV) (digestsMap map[crypto.Hash][]byte, err error) {
-	if tlv.Type != digestsTypeValue {
+	if tlv.Type != uint8(digestsTypeValue) {
 		return nil, fmt.Errorf("type of the TLV indicates it doesn't contain digests")
 	}
 
@@ -248,7 +295,7 @@ func unmarshalDigests(tlv TLV) (digestsMap map[crypto.Hash][]byte, err error) {
 	digestsMap = make(map[crypto.Hash][]byte)
 
 	for buf.Len() > 0 {
-		digestTLV, err := UnmarshalFirstTLV(buf)
+		digestTLV, err := unmarshalFirstTLV(buf)
 		if err == io.EOF {
 			return nil, fmt.Errorf("buffer ends unexpectedly")
 		} else if err != nil {
@@ -308,8 +355,8 @@ func (r *Record) EncodeCELR(buf *bytes.Buffer) error {
 
 // EncodeCEL encodes the CEL to bytes according to the CEL spec and write them
 // to the bytes buffer.
-func (c *CEL) EncodeCEL(buf *bytes.Buffer) error {
-	for _, record := range c.Records {
+func (c *eventLog) EncodeCEL(buf *bytes.Buffer) error {
+	for _, record := range c.Recs {
 		if err := record.EncodeCELR(buf); err != nil {
 			return err
 		}
@@ -320,24 +367,37 @@ func (c *CEL) EncodeCEL(buf *bytes.Buffer) error {
 // DecodeToCEL will read the buf for CEL, will return err if the buffer
 // is not complete.
 func DecodeToCEL(buf *bytes.Buffer) (CEL, error) {
-	var cel CEL
+	var cel eventLog
 	for buf.Len() > 0 {
-		celr, err := DecodeToCELR(buf)
+		celr, err := decodeToCELR(buf)
 		if err == io.EOF {
-			return CEL{}, fmt.Errorf("buffer ends unexpectedly")
+			return &eventLog{}, fmt.Errorf("buffer ends unexpectedly")
 		}
 		if err != nil {
-			return CEL{}, err
+			return &eventLog{}, err
 		}
-		cel.Records = append(cel.Records, celr)
+		cel.Recs = append(cel.Recs, celr)
 	}
-	return cel, nil
+	if len(cel.Recs) > 1 {
+		zeroMRType := MRType(cel.Recs[0].IndexType)
+		for _, rec := range cel.Recs {
+			mrType := MRType(rec.IndexType)
+			if err := supportedMRType(mrType); err != nil {
+				return &eventLog{}, fmt.Errorf("bad record %v: %v", rec.RecNum, err)
+			}
+			if mrType != zeroMRType {
+				return &eventLog{}, fmt.Errorf("bad record %v: found differing MR types in the CEL: got %v, expected %v", rec.RecNum, mrType, zeroMRType)
+			}
+		}
+		cel.Type = zeroMRType
+	}
+	return &cel, nil
 }
 
-// DecodeToCELR will read the buf for the next CELR, will return err if
+// decodeToCELR will read the buf for the next CELR, will return err if
 // failed to unmarshal a correct CELR TLV from the buffer.
-func DecodeToCELR(buf *bytes.Buffer) (r Record, err error) {
-	recnum, err := UnmarshalFirstTLV(buf)
+func decodeToCELR(buf *bytes.Buffer) (r Record, err error) {
+	recnum, err := unmarshalFirstTLV(buf)
 	if err != nil {
 		return Record{}, err
 	}
@@ -346,7 +406,7 @@ func DecodeToCELR(buf *bytes.Buffer) (r Record, err error) {
 		return Record{}, err
 	}
 
-	regIndex, err := UnmarshalFirstTLV(buf)
+	regIndex, err := unmarshalFirstTLV(buf)
 	if err != nil {
 		return Record{}, err
 	}
@@ -355,7 +415,7 @@ func DecodeToCELR(buf *bytes.Buffer) (r Record, err error) {
 		return Record{}, err
 	}
 
-	digests, err := UnmarshalFirstTLV(buf)
+	digests, err := unmarshalFirstTLV(buf)
 	if err != nil {
 		return Record{}, err
 	}
@@ -364,7 +424,7 @@ func DecodeToCELR(buf *bytes.Buffer) (r Record, err error) {
 		return Record{}, err
 	}
 
-	r.Content, err = UnmarshalFirstTLV(buf)
+	r.Content, err = unmarshalFirstTLV(buf)
 	if err != nil {
 		return Record{}, err
 	}
@@ -375,13 +435,13 @@ func DecodeToCELR(buf *bytes.Buffer) (r Record, err error) {
 // extend sequence for each register (PCR, RTMR) in the log. It then compares
 // the final digests against a bank of register values to see if they match.
 // make sure CEL has only one indexType event
-func (c *CEL) Replay(regs register.MRBank) error {
+func (c *eventLog) Replay(regs register.MRBank) error {
 	cryptoHash, err := regs.CryptoHash()
 	if err != nil {
 		return err
 	}
 	replayed := make(map[uint8][]byte)
-	for _, record := range c.Records {
+	for _, record := range c.Recs {
 		if _, ok := replayed[record.Index]; !ok {
 			replayed[record.Index] = make([]byte, cryptoHash.Size())
 		}
@@ -418,6 +478,14 @@ func (c *CEL) Replay(regs register.MRBank) error {
 	}
 
 	return fmt.Errorf("CEL replay failed for these registers in bank %v: %v", cryptoHash, failedReplayRegs)
+}
+
+func (c *eventLog) Records() []Record {
+	return c.Recs
+}
+
+func (c *eventLog) MRType() MRType {
+	return c.Type
 }
 
 // VerifyDigests checks the digest generated by the given record's content to make sure they are equal to

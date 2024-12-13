@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto"
 	"crypto/rand"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -17,47 +18,83 @@ func TestCELEncodingDecoding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	tests := []MRType{PCRType, CCMRType}
 
-	cel := &CEL{}
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("MRType %v", tc), func(t *testing.T) {
+			cel := eventLog{Type: tc}
 
-	fakeEvent1 := FakeTlv{FakeEvent1, []byte("docker.io/bazel/experimental/test:latest")}
-	appendFakeMREventOrFatal(t, cel, rot, 16, measuredHashes, fakeEvent1)
+			fakeEvent1 := FakeTlv{FakeEvent1, []byte("docker.io/bazel/experimental/test:latest")}
+			appendFakeMREventOrFatal(t, &cel, rot, 16, measuredHashes, fakeEvent1)
 
-	fakeEvent2 := FakeTlv{FakeEvent2, []byte("sha256:781d8dfdd92118436bd914442c8339e653b83f6bf3c1a7a98efcfb7c4fed7483")}
-	appendFakeMREventOrFatal(t, cel, rot, 23, measuredHashes, fakeEvent2)
+			fakeEvent2 := FakeTlv{FakeEvent2, []byte("sha256:781d8dfdd92118436bd914442c8339e653b83f6bf3c1a7a98efcfb7c4fed7483")}
+			appendFakeMREventOrFatal(t, &cel, rot, 23, measuredHashes, fakeEvent2)
 
-	var buf bytes.Buffer
-	if err := cel.EncodeCEL(&buf); err != nil {
-		t.Fatal(err)
+			var buf bytes.Buffer
+			if err := cel.EncodeCEL(&buf); err != nil {
+				t.Fatal(err)
+			}
+			decodedcel, err := DecodeToCEL(&buf)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if decodedcel.MRType() != tc {
+				t.Errorf("decoded CEL MR type: got %v, want %v", decodedcel.MRType(), tc)
+			}
+			if len(decodedcel.Records()) != 2 {
+				t.Errorf("should have two records")
+			}
+			if decodedcel.Records()[0].RecNum != 0 {
+				t.Errorf("recnum mismatch")
+			}
+			if decodedcel.Records()[1].RecNum != 1 {
+				t.Errorf("recnum mismatch")
+			}
+			if decodedcel.Records()[0].IndexType != uint8(tc) {
+				t.Errorf("index type mismatch")
+			}
+			if decodedcel.Records()[0].Index != uint8(16) {
+				t.Errorf("pcr value mismatch")
+			}
+			if decodedcel.Records()[1].IndexType != uint8(tc) {
+				t.Errorf("index type mismatch")
+			}
+			if decodedcel.Records()[1].Index != uint8(23) {
+				t.Errorf("pcr value mismatch")
+			}
+
+			if !reflect.DeepEqual(decodedcel.Records(), cel.Records()) {
+				t.Errorf("decoded CEL doesn't equal to the original one")
+			}
+		})
 	}
-	decodedcel, err := DecodeToCEL(&buf)
+}
+
+func TestCELAppendDifferentMRTypes(t *testing.T) {
+	rot, err := register.CreateFakeRot(measuredHashes, 24)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(decodedcel.Records) != 2 {
-		t.Errorf("should have two records")
-	}
-	if decodedcel.Records[0].RecNum != 0 {
-		t.Errorf("recnum mismatch")
-	}
-	if decodedcel.Records[1].RecNum != 1 {
-		t.Errorf("recnum mismatch")
-	}
-	if decodedcel.Records[0].IndexType != PCRTypeValue {
-		t.Errorf("index type mismatch")
-	}
-	if decodedcel.Records[0].Index != uint8(16) {
-		t.Errorf("pcr value mismatch")
-	}
-	if decodedcel.Records[1].IndexType != PCRTypeValue {
-		t.Errorf("index type mismatch")
-	}
-	if decodedcel.Records[1].Index != uint8(23) {
-		t.Errorf("pcr value mismatch")
-	}
 
-	if !reflect.DeepEqual(decodedcel.Records, cel.Records) {
-		t.Errorf("decoded CEL doesn't equal to the original one")
+	tests := []MRType{PCRType, CCMRType}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("MRType %v", tc), func(t *testing.T) {
+			el := eventLog{Type: tc}
+			event := FakeTlv{FakeEvent1, []byte("hellothere")}
+
+			appendFakeMREventOrFatal(t, &el, rot, 8, measuredHashes, event)
+			appendFakeMREventOrFatal(t, &el, rot, 8, measuredHashes, event)
+			appendFakeMREventOrFatal(t, &el, rot, 8, measuredHashes, event)
+			appendFakeMREventOrFatal(t, &el, rot, 8, measuredHashes, event)
+			appendFakeMREventOrFatal(t, &el, rot, 8, measuredHashes, event)
+
+			for _, rec := range el.Records() {
+				if rec.IndexType != uint8(tc) {
+					t.Errorf("AppendEvent(): got Index Type %v, want type %v", rec.IndexType, tc)
+				}
+			}
+		})
 	}
 }
 
@@ -67,7 +104,7 @@ func TestCELMeasureAndReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cel := &CEL{}
+	cel := NewPCR()
 	event := FakeTlv{FakeEvent1, []byte("docker.io/bazel/experimental/test:latest")}
 
 	someEvent2 := make([]byte, 10)
@@ -93,7 +130,7 @@ func TestCELReplayFailTamperedDigest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cel := &CEL{}
+	cel := NewPCR()
 
 	event := FakeTlv{FakeEvent1, []byte("docker.io/bazel/experimental/test:latest")}
 	someEvent2 := make([]byte, 10)
@@ -106,7 +143,7 @@ func TestCELReplayFailTamperedDigest(t *testing.T) {
 	appendFakeMREventOrFatal(t, cel, rot, 3, measuredHashes, event)
 	appendFakeMREventOrFatal(t, cel, rot, 3, measuredHashes, event)
 
-	modifiedRecord := cel.Records[3]
+	modifiedRecord := cel.Records()[3]
 	for hash := range modifiedRecord.Digests {
 		newDigest := make([]byte, hash.Size())
 		rand.Read(newDigest)
@@ -121,7 +158,7 @@ func TestCELReplayEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cel := &CEL{}
+	cel := NewPCR()
 	replay(t, cel, rot, []crypto.Hash{crypto.SHA1, crypto.SHA256},
 		[]int{12, 13}, true /*shouldSucceed*/)
 }
@@ -131,7 +168,7 @@ func TestCELReplayFailMissingMRsInBank(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cel := &CEL{}
+	cel := &eventLog{Type: PCRType}
 
 	someEvent := make([]byte, 10)
 	someEvent2 := make([]byte, 10)
@@ -146,7 +183,51 @@ func TestCELReplayFailMissingMRsInBank(t *testing.T) {
 		[]int{8}, false /*shouldSucceed*/)
 }
 
-func replay(t *testing.T, cel *CEL, rot register.FakeROT, measuredHashes []crypto.Hash, mrs []int, shouldSucceed bool) {
+func TestDecodeCELFailBadMRTypes(t *testing.T) {
+	rot, err := register.CreateFakeRot(measuredHashes, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cel := &eventLog{}
+	someEvent := make([]byte, 10)
+	if err := cel.AppendEvent(FakeTlv{FakeEvent1, someEvent}, measuredHashes, 7, fakeRotExtender(rot)); err == nil {
+		t.Errorf("AppendEvent(UnsetMR): got %v, expect err", err)
+	}
+
+}
+
+func TestCELAppendFailBadMRType(t *testing.T) {
+	rot, err := register.CreateFakeRot(measuredHashes, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		mrT       MRType
+		expectErr bool
+	}{
+		{mrT: PCRType, expectErr: false},
+		{mrT: CCMRType, expectErr: false},
+		{mrT: 0, expectErr: true},
+		{mrT: 2, expectErr: true},
+		{mrT: 4, expectErr: true},
+		{mrT: 100, expectErr: true},
+		{mrT: 100, expectErr: true},
+		{mrT: 255, expectErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("MRType %v", tc.mrT), func(t *testing.T) {
+			cel := &eventLog{Type: tc.mrT}
+			someEvent := make([]byte, 10)
+			if err := cel.AppendEvent(FakeTlv{FakeEvent1, someEvent}, measuredHashes, 7, fakeRotExtender(rot)); (err != nil) != tc.expectErr {
+				t.Errorf("AppendEvent(MRType %v): got %v, expectErr %v", tc.mrT, err, tc.expectErr)
+			}
+		})
+	}
+}
+
+func replay(t *testing.T, cel CEL, rot register.FakeROT, measuredHashes []crypto.Hash, mrs []int, shouldSucceed bool) {
 	for _, hash := range measuredHashes {
 		bank, err := rot.ReadMRs(hash, mrs)
 		if err != nil {
@@ -159,7 +240,7 @@ func replay(t *testing.T, cel *CEL, rot register.FakeROT, measuredHashes []crypt
 	}
 }
 
-func appendFakeMREventOrFatal(t *testing.T, cel *CEL, fakeROT register.FakeROT, mrIndex int, banks []crypto.Hash, event Content) {
+func appendFakeMREventOrFatal(t *testing.T, cel CEL, fakeROT register.FakeROT, mrIndex int, banks []crypto.Hash, event Content) {
 	if err := cel.AppendEvent(event, banks, mrIndex, fakeRotExtender(fakeROT)); err != nil {
 		t.Fatalf("failed to append PCR event: %v", err)
 	}
