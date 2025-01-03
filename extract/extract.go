@@ -59,7 +59,7 @@ type Opts struct {
 	Loader Bootloader
 }
 
-// GetFirmwareLogState extracts event info from a verified TCG PC Client event
+// FirmwareLogState extracts event info from a verified TCG PC Client event
 // log into a FirmwareLogState.
 // It returns an error on failing to parse malformed events.
 //
@@ -70,7 +70,7 @@ type Opts struct {
 // It is the caller's responsibility to ensure that the passed events have
 // been replayed (e.g., using `tcg.ParseAndReplay`) against a verified measurement
 // register bank.
-func GetFirmwareLogState(events []tcg.Event, hash crypto.Hash, registerCfg registerConfig, opts Opts) (*pb.FirmwareLogState, error) {
+func FirmwareLogState(events []tcg.Event, hash crypto.Hash, registerCfg registerConfig, opts Opts) (*pb.FirmwareLogState, error) {
 	var joined error
 	tcgHash, err := tpm2.HashToAlgorithm(hash)
 	if err != nil {
@@ -81,11 +81,11 @@ func GetFirmwareLogState(events []tcg.Event, hash crypto.Hash, registerCfg regis
 	if err != nil {
 		joined = errors.Join(joined, err)
 	}
-	sbState, err := GetSecureBootState(events, registerCfg)
+	sbState, err := SecureBootState(events, registerCfg)
 	if err != nil {
 		joined = errors.Join(joined, err)
 	}
-	efiState, err := GetEfiState(hash, events, registerCfg)
+	efiState, err := EfiState(hash, events, registerCfg)
 
 	if err != nil {
 		joined = errors.Join(joined, err)
@@ -99,7 +99,7 @@ func GetFirmwareLogState(events []tcg.Event, hash crypto.Hash, registerCfg regis
 		if err != nil {
 			joined = errors.Join(joined, err)
 		}
-		kernel, err = GetLinuxKernelStateFromGRUB(grub)
+		kernel, err = LinuxKernelStateFromGRUB(grub)
 		if err != nil {
 			joined = errors.Join(joined, err)
 		}
@@ -200,9 +200,9 @@ func matchWellKnown(cert x509.Certificate) (pb.WellKnownCertificate, error) {
 	return pb.WellKnownCertificate_UNKNOWN, errors.New("failed to find matching well known certificate")
 }
 
-// GetSecureBootState extracts Secure Boot information from a UEFI TCG2
+// SecureBootState extracts Secure Boot information from a UEFI TCG2
 // firmware event log.
-func GetSecureBootState(replayEvents []tcg.Event, registerCfg registerConfig) (*pb.SecureBootState, error) {
+func SecureBootState(replayEvents []tcg.Event, registerCfg registerConfig) (*pb.SecureBootState, error) {
 	attestSbState, err := ParseSecurebootState(replayEvents, registerCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse SecureBootState: %v", err)
@@ -218,9 +218,9 @@ func GetSecureBootState(replayEvents []tcg.Event, registerCfg registerConfig) (*
 	}, nil
 }
 
-// GetPlatformState extracts platform information from a UEFI TCG2 firmware
+// PlatformState extracts platform information from a UEFI TCG2 firmware
 // event log.
-func GetPlatformState(hash crypto.Hash, events []tcg.Event) (*pb.PlatformState, error) {
+func PlatformState(hash crypto.Hash, events []tcg.Event) (*pb.PlatformState, error) {
 	// We pre-compute the separator and EFI Action event hash.
 	// We check if these events have been modified, since the event type is
 	// untrusted.
@@ -271,9 +271,9 @@ func GetPlatformState(hash crypto.Hash, events []tcg.Event) (*pb.PlatformState, 
 	return state, nil
 }
 
-// GetEfiState extracts EFI app information from a UEFI TCG2 firmware
+// EfiState extracts EFI app information from a UEFI TCG2 firmware
 // event log.
-func GetEfiState(hash crypto.Hash, events []tcg.Event, registerCfg registerConfig) (*pb.EfiState, error) {
+func EfiState(hash crypto.Hash, events []tcg.Event, registerCfg registerConfig) (*pb.EfiState, error) {
 	// We pre-compute various event digests, and check if those event type have
 	// been modified. We only trust events that come before the
 	// ExitBootServices() request.
@@ -377,8 +377,8 @@ func GetEfiState(hash crypto.Hash, events []tcg.Event, registerCfg registerConfi
 	return nil, nil
 }
 
-// GetLinuxKernelStateFromGRUB extracts the kernel command line from GrubState.
-func GetLinuxKernelStateFromGRUB(grub *pb.GrubState) (*pb.LinuxKernelState, error) {
+// LinuxKernelStateFromGRUB extracts the kernel command line from GrubState.
+func LinuxKernelStateFromGRUB(grub *pb.GrubState) (*pb.LinuxKernelState, error) {
 	var cmdline string
 	seen := false
 

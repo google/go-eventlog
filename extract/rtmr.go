@@ -25,8 +25,8 @@ import (
 	"github.com/google/go-eventlog/tcg"
 )
 
-// GetGrubStateForRTMRLog extracts GRUB commands from RTMR2.
-func GetGrubStateForRTMRLog(hash crypto.Hash, events []tcg.Event) (*pb.GrubState, error) {
+// GrubStateFromRTMRLog extracts GRUB commands from RTMR2.
+func GrubStateFromRTMRLog(hash crypto.Hash, events []tcg.Event) (*pb.GrubState, error) {
 	var commands []string
 	for eventNum, event := range events {
 		ccMRIndex := event.MRIndex()

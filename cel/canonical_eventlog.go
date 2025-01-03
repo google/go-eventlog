@@ -128,7 +128,7 @@ type Record struct {
 // Content is a interface for the content in CELR.
 type Content interface {
 	GenerateDigest(crypto.Hash) ([]byte, error)
-	GetTLV() (TLV, error)
+	TLV() (TLV, error)
 }
 
 // CEL represents a Canonical Event Log, which contains a list of Records.
@@ -195,7 +195,7 @@ func (c *eventLog) AppendEvent(event Content, bankAlgos []crypto.Hash, mrIndex i
 		}
 	}
 
-	eventTlv, err := event.GetTLV()
+	eventTlv, err := event.TLV()
 	if err != nil {
 		return err
 	}

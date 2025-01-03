@@ -48,8 +48,8 @@ var TPMRegisterConfig = registerConfig{
 	ExitBootServicesIdx: 5,
 	GRUBCmdIdx:          8,
 	GRUBFileIdx:         9,
-	GRUBExtracter:       GetGrubStateForTPMLog,
-	PlatformExtracter:   GetPlatformState,
+	GRUBExtracter:       GrubStateFromTPMLog,
+	PlatformExtracter:   PlatformState,
 	// AdditionalSecureBootIdxEvents is empty since
 	// eventparse.ParseSecurebootState encodes all the current allowable types
 	// for PCR 7.
@@ -71,7 +71,7 @@ var RTMRRegisterConfig = registerConfig{
 	GRUBCmdIdx: 3,
 	// CCMR3=RTMR[2]=PCR[9]
 	GRUBFileIdx:   3,
-	GRUBExtracter: GetGrubStateForRTMRLog,
+	GRUBExtracter: GrubStateFromRTMRLog,
 	PlatformExtracter: func(_ crypto.Hash, _ []tcg.Event) (*pb.PlatformState, error) {
 		return &pb.PlatformState{Technology: pb.GCEConfidentialTechnology_INTEL_TDX}, nil
 	},

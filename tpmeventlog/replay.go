@@ -48,5 +48,5 @@ func ReplayAndExtract(rawEventLog []byte, pcrBank register.PCRBank, opts extract
 		return nil, err
 	}
 
-	return extract.GetFirmwareLogState(events, cryptoHash, extract.TPMRegisterConfig, opts)
+	return extract.FirmwareLogState(events, cryptoHash, extract.TPMRegisterConfig, opts)
 }

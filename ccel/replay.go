@@ -55,5 +55,5 @@ func ReplayAndExtract(acpiTableFile []byte, rawEventLog []byte, rtmrBank registe
 	if err != nil {
 		return nil, err
 	}
-	return extract.GetFirmwareLogState(events, cryptoHash, extract.RTMRRegisterConfig, opts)
+	return extract.FirmwareLogState(events, cryptoHash, extract.RTMRRegisterConfig, opts)
 }

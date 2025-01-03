@@ -27,8 +27,8 @@ type FakeTlv struct {
 	EventContent []byte
 }
 
-// GetTLV returns the TLV representation of the fake TLV.
-func (f FakeTlv) GetTLV() (TLV, error) {
+// TLV returns the TLV representation of the fake TLV.
+func (f FakeTlv) TLV() (TLV, error) {
 	data, err := TLV{uint8(f.EventType), f.EventContent}.MarshalBinary()
 	if err != nil {
 		return TLV{}, err
@@ -43,7 +43,7 @@ func (f FakeTlv) GetTLV() (TLV, error) {
 // GenerateDigest generates the digest for the given fake TLV. The whole TLV struct will
 // be marshaled to bytes and feed into the hash algo.
 func (f FakeTlv) GenerateDigest(hashAlgo crypto.Hash) ([]byte, error) {
-	contentTLV, err := f.GetTLV()
+	contentTLV, err := f.TLV()
 	if err != nil {
 		return nil, err
 	}

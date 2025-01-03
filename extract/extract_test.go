@@ -147,7 +147,7 @@ func TestExtractFirmwareLogStateRTMR(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			evts := getCCELEvents(t)
 			tc.mutate(evts)
-			_, err := GetFirmwareLogState(evts, crypto.SHA384, RTMRRegisterConfig, Opts{Loader: GRUB})
+			_, err := FirmwareLogState(evts, crypto.SHA384, RTMRRegisterConfig, Opts{Loader: GRUB})
 			if (err != nil) != tc.expectErr {
 				t.Errorf("ExtractFirmwareLogState(%v) = got %v, wantErr: %v", tc.name, err, tc.expectErr)
 			}
@@ -156,7 +156,7 @@ func TestExtractFirmwareLogStateRTMR(t *testing.T) {
 }
 
 func TestExtractFirmwareLogStateRTMRNilEvents(t *testing.T) {
-	_, err := GetFirmwareLogState(nil, crypto.SHA384, RTMRRegisterConfig, Opts{Loader: GRUB})
+	_, err := FirmwareLogState(nil, crypto.SHA384, RTMRRegisterConfig, Opts{Loader: GRUB})
 	if err == nil || !strings.Contains(err.Error(), "no GRUB measurements found") {
 		t.Errorf("ExtractFirmwareLogState(nil): got %v, expected error no GRUB measurements found", err)
 	}
@@ -299,7 +299,7 @@ func TestExtractFirmwareLogStateTPM(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			hash, evts := getTPMELEvents(t)
 			tc.mutate(evts)
-			_, err := GetFirmwareLogState(evts, hash, TPMRegisterConfig, Opts{Loader: GRUB})
+			_, err := FirmwareLogState(evts, hash, TPMRegisterConfig, Opts{Loader: GRUB})
 			if (err != nil) != tc.expectErr {
 				t.Errorf("ExtractFirmwareLogState(%v) = got %v, wantErr: %v", tc.name, err, tc.expectErr)
 			}
@@ -308,7 +308,7 @@ func TestExtractFirmwareLogStateTPM(t *testing.T) {
 }
 
 func TestExtractFirmwareLogStateTPMNilEvents(t *testing.T) {
-	_, err := GetFirmwareLogState(nil, crypto.SHA384, TPMRegisterConfig, Opts{Loader: GRUB})
+	_, err := FirmwareLogState(nil, crypto.SHA384, TPMRegisterConfig, Opts{Loader: GRUB})
 	if err == nil || !strings.Contains(err.Error(), "no GRUB measurements found") {
 		t.Errorf("ExtractFirmwareLogState(nil): got %v, expected error no GRUB measurements found", err)
 	}

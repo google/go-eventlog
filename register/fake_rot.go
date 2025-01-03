@@ -42,8 +42,8 @@ func CreateFakeRot(hashes []crypto.Hash, numIdxs int) (FakeROT, error) {
 	return FakeROT{fakeMRBanks: fakeMRBanks}, nil
 }
 
-// GetDigest returns the current digest for the given measurement register indicated by FakeMR.
-func (f FakeROT) GetDigest(mr FakeMR) ([]byte, error) {
+// Digest returns the current digest for the given measurement register indicated by FakeMR.
+func (f FakeROT) Digest(mr FakeMR) ([]byte, error) {
 	hash := mr.DigestAlg
 	idx := mr.Index
 	bank, ok := f.fakeMRBanks[hash]
@@ -92,7 +92,7 @@ func (f FakeROT) ExtendMR(mr FakeMR) error {
 		return fmt.Errorf("invalid digest size %v for algo %v, expected %v", len(digest), hash, hash.Size())
 	}
 
-	mrDigest, err := f.GetDigest(mr)
+	mrDigest, err := f.Digest(mr)
 	if err != nil {
 		return fmt.Errorf("failed to extend index %v in bank %v: %v", idx, hash, err)
 	}
