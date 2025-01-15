@@ -28,6 +28,7 @@ import (
 	"github.com/google/go-eventlog/register"
 	"github.com/google/go-eventlog/tcg"
 	"github.com/google/go-eventlog/testdata"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func TestExtractFirmwareLogStateRTMR(t *testing.T) {
@@ -147,10 +148,12 @@ func TestExtractFirmwareLogStateRTMR(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			evts := getCCELEvents(t)
 			tc.mutate(evts)
-			_, err := FirmwareLogState(evts, crypto.SHA384, RTMRRegisterConfig, Opts{Loader: GRUB})
+			fs, err := FirmwareLogState(evts, crypto.SHA384, RTMRRegisterConfig, Opts{Loader: GRUB})
 			if (err != nil) != tc.expectErr {
 				t.Errorf("ExtractFirmwareLogState(%v) = got %v, wantErr: %v", tc.name, err, tc.expectErr)
 			}
+			bts, _ := protojson.MarshalOptions{UseProtoNames: true}.Marshal(fs)
+			t.Log(string(bts))
 		})
 	}
 }
