@@ -87,3 +87,24 @@ func TestReplayAndExtractFailDuplicateSeparator(t *testing.T) {
 		t.Errorf("ReplayAndExtract(badELWithUEFIBug): got %v, expected error with duplicate separator message", err)
 	}
 }
+
+func TestReplayAndExtractEmptyLog(t *testing.T) {
+
+	tableBytes, err := os.ReadFile("../testdata/eventlogs/ccel/cos-113-intel-tdx.table.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rtmr0 := []byte("?\xa2\xf6\x1f9[\x7f_\xee\xfbN\xc2\xdfa)\x7f\x10\x9aث\xcdd\x10\xc1\xb7\xdf`\xf2\x1f7\xb1\x92\x97\xfc5\xe5D\x03\x9c~\x1e\xde\xceu*\xfd\x17\xf6")
+	rtmr1 := []byte("\xf6-\xbc\a+\xd5\xd3\xf3C\x8b{5Úr\x7fZ\xea/\xfc$s\xf47#\x95?S\r\xafbPO\nyD\xaab\xc4\x1a\x86\xe8\xa8x±\"\xc1")
+	rtmr2 := []byte("IihM\xc8s\x81\xfc;14\x17l\x8d\x88\x06\xea\xf0\xa9\x01\x85\x9f_pϮ\x8d\x17qKF\xc1\n\x8d\xe2\x19\x04\x8c\x9f\xc0\x9f\x11\xf3\x81\xa6\xfb\xe7\xc1")
+	bank := register.RTMRBank{RTMRs: []register.RTMR{
+		{Index: 0, Digest: rtmr0},
+		{Index: 1, Digest: rtmr1},
+		{Index: 2, Digest: rtmr2},
+	}}
+	_, err = ReplayAndExtract(tableBytes, nil, bank, extract.Opts{})
+	if err != nil {
+		t.Errorf("failed to ReplayAndExtract from CCEL: %v", err)
+	}
+}
