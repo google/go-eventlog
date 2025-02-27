@@ -120,7 +120,7 @@ type Record struct {
 	// Generic Measurement Register index number, register type
 	// is determined by IndexType
 	Index     uint8
-	IndexType uint8
+	IndexType MRType
 	Digests   map[crypto.Hash][]byte
 	Content   TLV
 }
@@ -205,7 +205,7 @@ func (c *eventLog) AppendEvent(event Content, bankAlgos []crypto.Hash, mrIndex i
 		Index:     uint8(mrIndex),
 		Digests:   digestMap,
 		Content:   eventTlv,
-		IndexType: uint8(c.Type),
+		IndexType: c.Type,
 	}
 
 	c.Recs = append(c.Recs, celrPCR)
@@ -246,8 +246,13 @@ func createIndexField(indexType uint8, indexNum uint8) TLV {
 
 // unmarshalIndex takes in a TLV with its type equals to the PCR or CCMR type value, and
 // return its index number.
-func unmarshalIndex(tlv TLV) (indexType uint8, pcrNum uint8, err error) {
-	if tlv.Type != uint8(PCRType) && tlv.Type != uint8(CCMRType) {
+func unmarshalIndex(tlv TLV) (indexType MRType, pcrNum uint8, err error) {
+	switch tlv.Type {
+	case uint8(PCRType):
+		indexType = PCRType
+	case uint8(CCMRType):
+		indexType = CCMRType
+	default:
 		return 0, 0, fmt.Errorf("type of the TLV [%d] indicates it is not a PCR [%d] or a CCMR [%d] field ",
 			tlv.Type, uint8(PCRType), uint8(CCMRType))
 	}
@@ -257,7 +262,7 @@ func unmarshalIndex(tlv TLV) (indexType uint8, pcrNum uint8, err error) {
 			len(tlv.Value), regIndexValueLength)
 	}
 
-	return tlv.Type, tlv.Value[0], nil
+	return indexType, tlv.Value[0], nil
 }
 
 func createDigestField(digestMap map[crypto.Hash][]byte) (TLV, error) {
@@ -318,7 +323,7 @@ func (r *Record) EncodeCELR(buf *bytes.Buffer) error {
 		return err
 	}
 
-	indexField, err := createIndexField(r.IndexType, r.Index).MarshalBinary()
+	indexField, err := createIndexField(uint8(r.IndexType), r.Index).MarshalBinary()
 	if err != nil {
 		return err
 	}

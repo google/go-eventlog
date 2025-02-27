@@ -50,13 +50,13 @@ func TestCELEncodingDecoding(t *testing.T) {
 			if decodedcel.Records()[1].RecNum != 1 {
 				t.Errorf("recnum mismatch")
 			}
-			if decodedcel.Records()[0].IndexType != uint8(tc) {
+			if decodedcel.Records()[0].IndexType != tc {
 				t.Errorf("index type mismatch")
 			}
 			if decodedcel.Records()[0].Index != uint8(16) {
 				t.Errorf("pcr value mismatch")
 			}
-			if decodedcel.Records()[1].IndexType != uint8(tc) {
+			if decodedcel.Records()[1].IndexType != tc {
 				t.Errorf("index type mismatch")
 			}
 			if decodedcel.Records()[1].Index != uint8(23) {
@@ -90,7 +90,7 @@ func TestCELAppendDifferentMRTypes(t *testing.T) {
 			appendFakeMREventOrFatal(t, &el, rot, 8, measuredHashes, event)
 
 			for _, rec := range el.Records() {
-				if rec.IndexType != uint8(tc) {
+				if rec.IndexType != tc {
 					t.Errorf("AppendEvent(): got Index Type %v, want type %v", rec.IndexType, tc)
 				}
 			}
