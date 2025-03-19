@@ -246,7 +246,7 @@ func createIndexField(indexType uint8, indexNum uint8) TLV {
 
 // unmarshalIndex takes in a TLV with its type equals to the PCR or CCMR type value, and
 // return its index number.
-func unmarshalIndex(tlv TLV) (indexType MRType, pcrNum uint8, err error) {
+func unmarshalIndex(tlv TLV) (indexType MRType, index uint8, err error) {
 	switch tlv.Type {
 	case uint8(PCRType):
 		indexType = PCRType

@@ -29,6 +29,17 @@ message GCEInstanceInfo {
   uint64 instance_id = 5;
 }
 
+// The type of UEFI firmware log.
+enum LogType {
+  UNDEFINED = 0;
+  // The log used by EFI_TCG2_PROTOCOL and defined in the TCG PC Client
+  // Platform Firmware Profile Specification
+  TCG2 = 1;
+  // The log used by EFI_CC_MEASUREMENT_PROTOCOL and defined in the UEFI spec:
+  // https://uefi.org/specs/UEFI/2.10/38_Confidential_Computing.html.
+  CC = 2;
+}
+
 // Type of hardware technology used to protect this instance
 enum GCEConfidentialTechnology {
   NONE = 0;
@@ -189,5 +200,7 @@ message FirmwareLogState {
   LinuxKernelState linux_kernel = 6;
 
   EfiState efi = 8;
+
+  LogType log_type = 9;
 }
 

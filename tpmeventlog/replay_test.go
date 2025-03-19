@@ -572,6 +572,7 @@ func TestEmptyEventlog(t *testing.T) {
 		Hash:       pb.HashAlgo_SHA1,
 		Platform:   &pb.PlatformState{Firmware: &pb.PlatformState_ScrtmVersionId{}},
 		SecureBoot: &pb.SecureBootState{},
+		LogType:    pb.LogType_TCG2,
 	}
 	emptyBank := register.PCRBank{TCGHashAlgo: pb.HashAlgo_SHA1}
 

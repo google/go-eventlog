@@ -112,6 +112,7 @@ func FirmwareLogState(events []tcg.Event, hash crypto.Hash, registerCfg register
 		Hash:        pb.HashAlgo(tcgHash),
 		Grub:        grub,
 		LinuxKernel: kernel,
+		LogType:     registerCfg.LogType,
 	}, joined
 }
 

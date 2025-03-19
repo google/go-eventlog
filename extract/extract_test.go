@@ -28,7 +28,6 @@ import (
 	"github.com/google/go-eventlog/register"
 	"github.com/google/go-eventlog/tcg"
 	"github.com/google/go-eventlog/testdata"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func TestExtractFirmwareLogStateRTMR(t *testing.T) {
@@ -150,10 +149,11 @@ func TestExtractFirmwareLogStateRTMR(t *testing.T) {
 			tc.mutate(evts)
 			fs, err := FirmwareLogState(evts, crypto.SHA384, RTMRRegisterConfig, Opts{Loader: GRUB})
 			if (err != nil) != tc.expectErr {
-				t.Errorf("ExtractFirmwareLogState(%v) = got %v, wantErr: %v", tc.name, err, tc.expectErr)
+				t.Errorf("FirmwareLogState(%v) = got %v, wantErr: %v", tc.name, err, tc.expectErr)
 			}
-			bts, _ := protojson.MarshalOptions{UseProtoNames: true}.Marshal(fs)
-			t.Log(string(bts))
+			if fs.LogType != pb.LogType_CC {
+				t.Errorf("FirmwareLogState(%v) = got LogType %v, want LogType: %v", tc.name, fs.LogType, pb.LogType_CC)
+			}
 		})
 	}
 }
@@ -302,11 +302,27 @@ func TestExtractFirmwareLogStateTPM(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			hash, evts := getTPMELEvents(t)
 			tc.mutate(evts)
-			_, err := FirmwareLogState(evts, hash, TPMRegisterConfig, Opts{Loader: GRUB})
+			fs, err := FirmwareLogState(evts, hash, TPMRegisterConfig, Opts{Loader: GRUB})
 			if (err != nil) != tc.expectErr {
 				t.Errorf("ExtractFirmwareLogState(%v) = got %v, wantErr: %v", tc.name, err, tc.expectErr)
 			}
+			if fs.LogType != pb.LogType_TCG2 {
+				t.Errorf("FirmwareLogState(%v) = got LogType %v, want LogType: %v", tc.name, fs.LogType, pb.LogType_TCG2)
+			}
 		})
+	}
+}
+
+func TestExtractFirmwareLogStateNoLogType(t *testing.T) {
+	hash, evts := getTPMELEvents(t)
+	missingType := TPMRegisterConfig
+	missingType.LogType = pb.LogType_UNDEFINED
+	fs, err := FirmwareLogState(evts, hash, missingType, Opts{Loader: GRUB})
+	if err != nil {
+		t.Fatal("failed to extract FirmwareLogState")
+	}
+	if fs.LogType != pb.LogType_UNDEFINED {
+		t.Errorf("FirmwareLogState() = got LogType %v, want LogType: %v", fs.LogType, pb.LogType_UNDEFINED)
 	}
 }
 
