@@ -31,13 +31,13 @@ message GCEInstanceInfo {
 
 // The type of UEFI firmware log.
 enum LogType {
-  UNDEFINED = 0;
+  LOG_TYPE_UNDEFINED = 0;
   // The log used by EFI_TCG2_PROTOCOL and defined in the TCG PC Client
   // Platform Firmware Profile Specification
-  TCG2 = 1;
+  LOG_TYPE_TCG2 = 1;
   // The log used by EFI_CC_MEASUREMENT_PROTOCOL and defined in the UEFI spec:
   // https://uefi.org/specs/UEFI/2.10/38_Confidential_Computing.html.
-  CC = 2;
+  LOG_TYPE_CC = 2;
 }
 
 // Type of hardware technology used to protect this instance

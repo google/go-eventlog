@@ -151,8 +151,8 @@ func TestExtractFirmwareLogStateRTMR(t *testing.T) {
 			if (err != nil) != tc.expectErr {
 				t.Errorf("FirmwareLogState(%v) = got %v, wantErr: %v", tc.name, err, tc.expectErr)
 			}
-			if fs.LogType != pb.LogType_CC {
-				t.Errorf("FirmwareLogState(%v) = got LogType %v, want LogType: %v", tc.name, fs.LogType, pb.LogType_CC)
+			if fs.LogType != pb.LogType_LOG_TYPE_CC {
+				t.Errorf("FirmwareLogState(%v) = got LogType %v, want LogType: %v", tc.name, fs.LogType, pb.LogType_LOG_TYPE_CC)
 			}
 		})
 	}
@@ -306,8 +306,8 @@ func TestExtractFirmwareLogStateTPM(t *testing.T) {
 			if (err != nil) != tc.expectErr {
 				t.Errorf("ExtractFirmwareLogState(%v) = got %v, wantErr: %v", tc.name, err, tc.expectErr)
 			}
-			if fs.LogType != pb.LogType_TCG2 {
-				t.Errorf("FirmwareLogState(%v) = got LogType %v, want LogType: %v", tc.name, fs.LogType, pb.LogType_TCG2)
+			if fs.LogType != pb.LogType_LOG_TYPE_TCG2 {
+				t.Errorf("FirmwareLogState(%v) = got LogType %v, want LogType: %v", tc.name, fs.LogType, pb.LogType_LOG_TYPE_TCG2)
 			}
 		})
 	}
@@ -316,13 +316,13 @@ func TestExtractFirmwareLogStateTPM(t *testing.T) {
 func TestExtractFirmwareLogStateNoLogType(t *testing.T) {
 	hash, evts := getTPMELEvents(t)
 	missingType := TPMRegisterConfig
-	missingType.LogType = pb.LogType_UNDEFINED
+	missingType.LogType = pb.LogType_LOG_TYPE_UNDEFINED
 	fs, err := FirmwareLogState(evts, hash, missingType, Opts{Loader: GRUB})
 	if err != nil {
 		t.Fatal("failed to extract FirmwareLogState")
 	}
-	if fs.LogType != pb.LogType_UNDEFINED {
-		t.Errorf("FirmwareLogState() = got LogType %v, want LogType: %v", fs.LogType, pb.LogType_UNDEFINED)
+	if fs.LogType != pb.LogType_LOG_TYPE_UNDEFINED {
+		t.Errorf("FirmwareLogState() = got LogType %v, want LogType: %v", fs.LogType, pb.LogType_LOG_TYPE_UNDEFINED)
 	}
 }
 

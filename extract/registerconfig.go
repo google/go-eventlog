@@ -54,7 +54,7 @@ var TPMRegisterConfig = registerConfig{
 	// AdditionalSecureBootIdxEvents is empty since
 	// eventparse.ParseSecurebootState encodes all the current allowable types
 	// for PCR 7.
-	LogType: pb.LogType_TCG2,
+	LogType: pb.LogType_LOG_TYPE_TCG2,
 }
 
 // RTMRRegisterConfig configures the expected indexes and event types for
@@ -94,5 +94,5 @@ var RTMRRegisterConfig = registerConfig{
 		// The following is not spec-compliant for PCR 1 or 7. The spec says [0, 2, 4].
 		tcg.EFIPlatformFirmwareBlob2: true,
 	},
-	LogType: pb.LogType_CC,
+	LogType: pb.LogType_LOG_TYPE_CC,
 }
