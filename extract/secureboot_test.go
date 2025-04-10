@@ -15,12 +15,15 @@
 package extract_test
 
 import (
+	"bytes"
 	"crypto"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"os"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-eventlog/extract"
 	"github.com/google/go-eventlog/internal/testutil"
 	"github.com/google/go-eventlog/proto/state"
@@ -50,7 +53,7 @@ func TestSecureBoot(t *testing.T) {
 		t.Fatalf("validating event log: %v", err)
 	}
 
-	sbState, err := extract.ParseSecurebootState(events, extract.TPMRegisterConfig)
+	sbState, err := extract.ParseSecurebootState(events, extract.TPMRegisterConfig, extract.Opts{})
 	if err != nil {
 		t.Fatalf("ExtractSecurebootState() failed: %v", err)
 	}
@@ -127,7 +130,7 @@ func TestSecureBootBug157(t *testing.T) {
 		t.Fatalf("failed to verify log: %v", err)
 	}
 
-	sbs, err := extract.ParseSecurebootState(events, extract.TPMRegisterConfig)
+	sbs, err := extract.ParseSecurebootState(events, extract.TPMRegisterConfig, extract.Opts{})
 	if err != nil {
 		t.Fatalf("failed parsing secureboot state: %v", err)
 	}
@@ -170,7 +173,7 @@ func TestSecureBootOptionRom(t *testing.T) {
 		t.Errorf("failed to verify log: %v", err)
 	}
 
-	sbs, err := extract.ParseSecurebootState(events, extract.TPMRegisterConfig)
+	sbs, err := extract.ParseSecurebootState(events, extract.TPMRegisterConfig, extract.Opts{})
 	if err != nil {
 		t.Errorf("failed parsing secureboot state: %v", err)
 	}
@@ -199,7 +202,7 @@ func TestSecureBootEventLogUbuntu(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verifying event log: %v", err)
 	}
-	_, err = extract.ParseSecurebootState(evts, extract.TPMRegisterConfig)
+	_, err = extract.ParseSecurebootState(evts, extract.TPMRegisterConfig, extract.Opts{})
 	if err != nil {
 		t.Errorf("parsing sb state: %v", err)
 	}
@@ -218,8 +221,139 @@ func TestSecureBootEventLogFedora36(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verifying event log: %v", err)
 	}
-	_, err = extract.ParseSecurebootState(evts, extract.TPMRegisterConfig)
+	_, err = extract.ParseSecurebootState(evts, extract.TPMRegisterConfig, extract.Opts{})
 	if err != nil {
 		t.Errorf("parsing sb state: %v", err)
 	}
+}
+
+func TestEncodeUEFIVariableData(t *testing.T) {
+	data, err := os.ReadFile("../testdata/legacydata/coreos_36_shielded_vm_no_secure_boot_eventlog")
+	if err != nil {
+		t.Fatalf("reading test data: %v", err)
+	}
+	el, err := tcg.ParseEventLog(data, tcg.ParseOpts{})
+	if err != nil {
+		t.Fatalf("parsing event log: %v", err)
+	}
+	evts := el.Events(register.HashSHA256)
+	if err != nil {
+		t.Fatalf("verifying event log: %v", err)
+	}
+	for _, evt := range evts {
+		if evt.Type != tcg.EFIVariableDriverConfig {
+			continue
+		}
+		v, err := tcg.ParseUEFIVariableData(bytes.NewReader(evt.RawData()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := v.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		newv, err := tcg.ParseUEFIVariableData(bytes.NewReader(data))
+		if err != nil {
+			t.Errorf("failed to parse after encoding: %v", err)
+		}
+		if diff := cmp.Diff(v, newv); diff != "" {
+			t.Errorf("Encode() produced different encodings: %v", diff)
+		}
+	}
+
+}
+
+func TestSecureBootAllowEmptySBVar(t *testing.T) {
+	data, err := os.ReadFile("../testdata/legacydata/coreos_36_shielded_vm_no_secure_boot_eventlog")
+	if err != nil {
+		t.Fatalf("reading test data: %v", err)
+	}
+	el, err := tcg.ParseEventLog(data, tcg.ParseOpts{})
+	if err != nil {
+		t.Fatalf("parsing event log: %v", err)
+	}
+	evts := el.Events(register.HashSHA256)
+	if err != nil {
+		t.Fatalf("verifying event log: %v", err)
+	}
+	tests := []struct {
+		name       string
+		newVar     []byte
+		allowEmpty bool
+		wantErr    bool
+	}{
+		{
+			name:       "emptyAllowed",
+			allowEmpty: true,
+		},
+		{
+			name:    "emptyNotAllowed",
+			wantErr: true,
+		},
+		{
+			name:       "1emptyAllowed",
+			newVar:     []byte{1},
+			allowEmpty: true,
+		},
+		{
+			name:   "1emptyNotAllowed",
+			newVar: []byte{1},
+		},
+		{
+			name:       "0emptyAllowed",
+			newVar:     []byte{0},
+			allowEmpty: true,
+		},
+		{
+			name:   "0emptyNotAllowed",
+			newVar: []byte{0},
+		},
+		{
+			name:       "len2emptyAllowed",
+			newVar:     []byte{0, 1},
+			allowEmpty: true,
+			wantErr:    true,
+		},
+		{
+			name:    "len2emptyNotAllowed",
+			newVar:  []byte{0, 1},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for i, evt := range evts {
+				if evt.Type != tcg.EFIVariableDriverConfig {
+					continue
+				}
+				v, err := tcg.ParseUEFIVariableData(bytes.NewReader(evt.RawData()))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if v.VarName() == "SecureBoot" {
+					v.VariableData = tt.newVar
+				}
+				data, err := v.Encode()
+				if err != nil {
+					t.Fatal(err)
+				}
+				evt.Data = data
+				dgst := sha256.Sum256(evt.Data)
+				evt.Digest = dgst[:]
+				evts[i] = evt
+			}
+			opts := extract.Opts{}
+			if tt.allowEmpty {
+				opts.AllowEmptySBVar = true
+			}
+			_, err = extract.ParseSecurebootState(evts, extract.TPMRegisterConfig, opts)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseSecurebootState() = %v, wantErr %v", err, tt.wantErr)
+
+			}
+
+		})
+	}
+
 }

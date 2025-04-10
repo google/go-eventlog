@@ -97,7 +97,7 @@ func ParseSecurebootStateLegacy(events []tcg.Event) (*SecurebootState, error) {
 	// - If SecureBoot was 1 (enabled), platform + exchange + database keys
 	//   were specified.
 	// - No UEFI debugger was attached.
-	return ParseSecurebootState(events, TPMRegisterConfig)
+	return ParseSecurebootState(events, TPMRegisterConfig, Opts{})
 }
 
 // ParseSecurebootState parses a series of events to determine the
@@ -105,7 +105,7 @@ func ParseSecurebootStateLegacy(events []tcg.Event) (*SecurebootState, error) {
 // the state cannot be determined, or if the event log is structured
 // in such a way that it may have been tampered post-execution of
 // platform firmware.
-func ParseSecurebootState(events []tcg.Event, registerCfg registerConfig) (*SecurebootState, error) {
+func ParseSecurebootState(events []tcg.Event, registerCfg registerConfig, opts Opts) (*SecurebootState, error) {
 	var (
 		out            SecurebootState
 		seenSeparator7 bool
@@ -173,10 +173,14 @@ func ParseSecurebootState(events []tcg.Event, registerCfg registerConfig) (*Secu
 
 				switch v.VarName() {
 				case "SecureBoot":
-					if len(v.VariableData) != 1 {
+					if len(v.VariableData) == 1 {
+						out.Enabled = v.VariableData[0] == 1
+					} else if len(v.VariableData) == 0 && opts.AllowEmptySBVar {
+						out.Enabled = false
+					} else {
 						return nil, fmt.Errorf("event %d: SecureBoot data len is %d, expected 1", e.Num(), len(v.VariableData))
 					}
-					out.Enabled = v.VariableData[0] == 1
+
 				case "PK":
 					if out.PlatformKeys, out.PlatformKeyHashes, err = v.SignatureData(); err != nil {
 						return nil, fmt.Errorf("event %d: failed parsing platform keys: %v", e.Num(), err)

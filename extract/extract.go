@@ -57,6 +57,9 @@ const (
 // Opts gives options for extracting information from an event log.
 type Opts struct {
 	Loader Bootloader
+	// AllowEmptySBVar allows the SecureBoot variable to be empty in addition to length 1 (0 or 1).
+	// This can be used when the SecureBoot variable is not initialized.
+	AllowEmptySBVar bool
 }
 
 // FirmwareLogState extracts event info from a verified TCG PC Client event
@@ -81,7 +84,7 @@ func FirmwareLogState(events []tcg.Event, hash crypto.Hash, registerCfg register
 	if err != nil {
 		joined = errors.Join(joined, err)
 	}
-	sbState, err := SecureBootState(events, registerCfg)
+	sbState, err := SecureBootState(events, registerCfg, opts)
 	if err != nil {
 		joined = errors.Join(joined, err)
 	}
@@ -209,8 +212,8 @@ func matchWellKnown(cert x509.Certificate) (pb.WellKnownCertificate, error) {
 
 // SecureBootState extracts Secure Boot information from a UEFI TCG2
 // firmware event log.
-func SecureBootState(replayEvents []tcg.Event, registerCfg registerConfig) (*pb.SecureBootState, error) {
-	attestSbState, err := ParseSecurebootState(replayEvents, registerCfg)
+func SecureBootState(replayEvents []tcg.Event, registerCfg registerConfig, opts Opts) (*pb.SecureBootState, error) {
+	attestSbState, err := ParseSecurebootState(replayEvents, registerCfg, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse SecureBootState: %v", err)
 	}

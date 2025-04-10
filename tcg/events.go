@@ -314,6 +314,33 @@ type UEFIVariableData struct {
 	VariableData []byte // []int8
 }
 
+// Encode encodes the UEFIVariableData struct into raw bytes.
+func (v *UEFIVariableData) Encode() ([]byte, error) {
+	buf := new(bytes.Buffer)
+
+	v.Header.UnicodeNameLength = uint64(len(v.UnicodeName))
+	v.Header.VariableDataLength = uint64(len(v.VariableData))
+
+	err := binary.Write(buf, binary.LittleEndian, v.Header)
+	if err != nil {
+		return nil, fmt.Errorf("error encoding header: %w", err)
+	}
+
+	for _, nameChar := range v.UnicodeName {
+		err = binary.Write(buf, binary.LittleEndian, nameChar)
+		if err != nil {
+			return nil, fmt.Errorf("error encoding unicode name: %w", err)
+		}
+	}
+
+	_, err = buf.Write(v.VariableData)
+	if err != nil {
+		return nil, fmt.Errorf("error encoding variable data: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
 // ParseUEFIVariableData parses the data section of an event structured as
 // a UEFI variable.
 //
