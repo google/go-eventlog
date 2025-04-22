@@ -511,6 +511,50 @@ var COS101AmdSev = eventLog{
 	},
 }
 
+var COS121AmdSev = eventLog{
+	RawLog: testdata.Cos121AmdSevEventLog,
+	Banks: []register.PCRBank{
+		testutil.MakePCRBank(pb.HashAlgo_SHA1, map[uint32][]byte{
+			0:  decodeHex("2aab58e23ea5120d70a3ebce56bd0e6d5e3035b7"),
+			1:  decodeHex("7c6ceae56da5ec69a014839ed3836c1ad1f97fae"),
+			2:  decodeHex("b2a83b0ebf2f8374299a5b2bdfc31ea955ad7236"),
+			3:  decodeHex("b2a83b0ebf2f8374299a5b2bdfc31ea955ad7236"),
+			4:  decodeHex("744681cd9b2c328732972f44e5c048962a6091db"),
+			5:  decodeHex("2038a05b30e431bc90fefc707eb88b7123781de5"),
+			6:  decodeHex("b2a83b0ebf2f8374299a5b2bdfc31ea955ad7236"),
+			7:  decodeHex("0f3afa2ce65000d446cff333f3fbeb712b82f757"),
+			8:  decodeHex("89a7e2ee73517b718cd9e6219eb460f867a129c1"),
+			9:  decodeHex("23556f8a8369b79f399460d7412461da2867366d"),
+			14: decodeHex("68cdd38d74c5f61a0dc1bd4718d88f63d2d83f74"),
+		}),
+		testutil.MakePCRBank(pb.HashAlgo_SHA256, map[uint32][]byte{
+			0:  decodeHex("a0b5ff3383a1116bd7dc6df177c0c2d433b9ee1813ea958fa5d166a202cb2a85"),
+			1:  decodeHex("b27ff5c19cbceedb0c2895c615375c56a6895e7395dc3b7d4c829c16d476b5ac"),
+			2:  decodeHex("3d458cfe55cc03ea1f443f1562beec8df51c75e14a9fcf9a7234a13f198e7969"),
+			3:  decodeHex("3d458cfe55cc03ea1f443f1562beec8df51c75e14a9fcf9a7234a13f198e7969"),
+			4:  decodeHex("aa4b93758b9bb6251f2145d145a0e8cc8999c03a51836110acaaba3a8389ab24"),
+			5:  decodeHex("76a2236828981324a7725fa1eae98d39e715043007645e0d72901130724f58cb"),
+			6:  decodeHex("3d458cfe55cc03ea1f443f1562beec8df51c75e14a9fcf9a7234a13f198e7969"),
+			7:  decodeHex("8c5dc451764d0db9c1e17da03564bcae3a09fa3d7f8e467d9c381dc8698377d6"),
+			8:  decodeHex("64a15058fbcbe58302d3e5fbf282427e6cb14db845cb868dd93711cbd8b1dede"),
+			9:  decodeHex("5898afd0e7191655aab771b1cd161b123ba4e22e642fb006b9247b96731179d1"),
+			14: decodeHex("6eb05e8a8a6272a8e4b925a67c650daa13c12b1a80cc797d40fd345e29660161"),
+		}),
+	},
+	ExpectedEFIAppDigests: map[pb.HashAlgo][]string{
+		pb.HashAlgo_SHA1: {
+			"a27964f69296586fb31b7952864215e13b2a7b85",
+			"be1709b381979f0966e6181a2e6e76605ce03682",
+			"118d603d6e600b4bc022731f91e72abc1b14a3a5",
+		},
+		pb.HashAlgo_SHA256: {
+			"451bfd03c48b7aa729dcd8ae3f8aaa9e9e2ab6c01d10cbec26fced02f3895497",
+			"004a191eabfc1d4e2b1e91e3e76b8affea1b88be560ab9993493be19462618ca",
+			"efc95c549c438984070116a1f5e49fe5710661c7d9835fb75c92652f8b9a7c23",
+		},
+	},
+}
+
 func TestParseEventLogs(t *testing.T) {
 	sbatErrorStr := "asn1: structure error: tags don't match (16 vs {class:0 tag:24 length:10 isCompound:true})"
 	logs := []struct {
@@ -535,6 +579,7 @@ func TestParseEventLogs(t *testing.T) {
 		{COS85AmdSev, "COS85AmdSev", extract.GRUB, nil},
 		{COS93AmdSev, "COS93AmdSev", extract.GRUB, nil},
 		{COS101AmdSev, "COS101AmdSev", extract.GRUB, nil},
+		{COS121AmdSev, "COS121AmdSev", extract.GRUB, nil},
 	}
 
 	for _, log := range logs {
@@ -544,10 +589,15 @@ func TestParseEventLogs(t *testing.T) {
 			subtestName := fmt.Sprintf("%s-%s", log.name, hashName)
 			t.Run(subtestName, func(t *testing.T) {
 				if _, err := ReplayAndExtract(rawLog, bank, extract.Opts{Loader: log.Bootloader}); err != nil {
+					matched := false
 					for _, knownErr := range log.knownErrs {
-						if !strings.Contains(err.Error(), knownErr) {
-							t.Errorf("failed to extract log state: %v", err)
+						if strings.Contains(err.Error(), knownErr) {
+							matched = true
+							break
 						}
+					}
+					if len(log.knownErrs) == 0 || !matched {
+						t.Errorf("failed to extract log state: %v", err)
 					}
 				}
 			})
@@ -772,6 +822,7 @@ func TestParseEfiState(t *testing.T) {
 		{COS85AmdSev, "COS85AmdSev"},
 		{COS93AmdSev, "COS93AmdSev"},
 		{COS101AmdSev, "COS101AmdSev"},
+		{COS121AmdSev, "COS121AmdSev"},
 	}
 	for _, log := range logs {
 		for _, bank := range log.Banks {

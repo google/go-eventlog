@@ -41,6 +41,8 @@ var (
 	Cos93AmdSevEventLog []byte
 	//go:embed eventlogs/tpm/cos-101-amd-sev.bin
 	Cos101AmdSevEventLog []byte
+	//go:embed eventlogs/tpm/cos-121-amd-sev.bin
+	Cos121AmdSevEventLog []byte
 )
 
 // Kernel command lines from event logs.
