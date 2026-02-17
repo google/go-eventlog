@@ -596,7 +596,7 @@ func TestParseEventLogs(t *testing.T) {
 		{Ubuntu2104NoSecureBootGCE, "Ubuntu2104NoSecureBootGCE", extract.Opts{Loader: extract.GRUB}, []string{sbatErrorStr}},
 		{Ubuntu2404AmdSevSnp, "Ubuntu2404AmdSevSnp", extract.Opts{Loader: extract.GRUB}, nil},
 		// This event log has a SecureBoot variable length of 0.
-		{ArchLinuxWorkstation, "ArchLinuxWorkstation", extract.Opts{Loader: extract.UnsupportedLoader, AllowEFIAppBeforeCallingEvent: true, AllowEmptySBVar: true}, nil},
+		{ArchLinuxWorkstation, "ArchLinuxWorkstation", extract.Opts{Loader: extract.UnsupportedLoader, AllowEFIAppBeforeCallingEvent: true, AllowEmptySBVar: true}, []string{"found separator event in PCR4 before CallingEFIApp event"}},
 		{COS85AmdSev, "COS85AmdSev", extract.Opts{Loader: extract.GRUB}, nil},
 		{COS93AmdSev, "COS93AmdSev", extract.Opts{Loader: extract.GRUB}, nil},
 		{COS101AmdSev, "COS101AmdSev", extract.Opts{Loader: extract.GRUB}, nil},

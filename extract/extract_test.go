@@ -503,6 +503,26 @@ func TestEfiState(t *testing.T) {
 				AllowEFIAppBeforeCallingEvent: false,
 			},
 		},
+		{
+			name: "failed with valid boot attempt before Separator event in CCEL logs",
+			events: func() (crypto.Hash, []tcg.Event) {
+				hash, evts := crypto.SHA384, getCCELEvents(t)
+				var failedEvts []tcg.Event
+				for _, e := range evts {
+					if bytes.Equal(e.RawData(), []byte(tcg.CallingEFIApplication)) {
+						continue
+					}
+					failedEvts = append(failedEvts, e)
+				}
+				return hash, failedEvts
+			},
+			registserConfig: RTMRRegisterConfig,
+			wantPass:        false,
+			wantEfiState:    nil,
+			opts: Opts{
+				AllowEFIAppBeforeCallingEvent: true,
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
