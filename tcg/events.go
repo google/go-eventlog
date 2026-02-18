@@ -223,8 +223,8 @@ func UntrustedParseEventType(et uint32) (EventType, error) {
 // Table 17 EV_EFI_ACTION Strings.
 const (
 	// Measured when Boot Manager attempts to execute code from a Boot Option.
-	CallingEFIApplication      string = "Calling EFI Application from Boot Option"
-	ExitBootServicesInvocation string = "Exit Boot Services Invocation"
+	CallingEFIApplication       string = "Calling EFI Application from Boot Option"
+	ExitBootServicesInvocation  string = "Exit Boot Services Invocation"
 	ReturningFromEFIApplication string = "Returning from EFI Application from Boot Option"
 )
 
