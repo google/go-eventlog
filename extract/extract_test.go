@@ -148,14 +148,22 @@ func TestExtractFirmwareLogStateRTMR(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			evts := getCCELEvents(t)
-			tc.mutate(evts)
-			fs, err := FirmwareLogState(evts, crypto.SHA384, RTMRRegisterConfig, Opts{Loader: GRUB})
-			if (err != nil) != tc.expectErr {
-				t.Errorf("FirmwareLogState(%v) = got %v, wantErr: %v", tc.name, err, tc.expectErr)
+			eventGetters := map[string]func(*testing.T) []tcg.Event{
+				"singleBoot":   getCCELEvents,
+				"multipleBoot": getCCELEventsWithMultipleBootAttempts,
 			}
-			if fs.LogType != pb.LogType_LOG_TYPE_CC {
-				t.Errorf("FirmwareLogState(%v) = got LogType %v, want LogType: %v", tc.name, fs.LogType, pb.LogType_LOG_TYPE_CC)
+			for name, getEvents := range eventGetters {
+				t.Run(name, func(t *testing.T) {
+					evts := getEvents(t)
+					tc.mutate(evts)
+					fs, err := FirmwareLogState(evts, crypto.SHA384, RTMRRegisterConfig, Opts{Loader: GRUB})
+					if (err != nil) != tc.expectErr {
+						t.Errorf("FirmwareLogState() = got %v, wantErr: %v", err, tc.expectErr)
+					}
+					if err == nil && fs.LogType != pb.LogType_LOG_TYPE_CC {
+						t.Errorf("FirmwareLogState() = got LogType %v, want LogType: %v", fs.LogType, pb.LogType_LOG_TYPE_CC)
+					}
+				})
 			}
 		})
 	}
@@ -180,6 +188,28 @@ func getCCELEvents(t *testing.T) []tcg.Event {
 		register.RTMR{Index: 0, Digest: rtmr0},
 		register.RTMR{Index: 1, Digest: rtmr1},
 		register.RTMR{Index: 2, Digest: rtmr2},
+	}
+	events, err := tcg.ParseAndReplay(elBytes, mrs, tcg.ParseOpts{AllowPadding: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return events
+}
+
+func getCCELEventsWithMultipleBootAttempts(t *testing.T) []tcg.Event {
+	elBytes, err := os.ReadFile("../testdata/eventlogs/ccel/ubuntu-2404-intel-tdx.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rtmr0 := []byte(">/\xb8\xad]\xe9\xb9\xe6m\x0f\xe7:T\xc0)\x13\x0e\xb9\xc0\xae\xf0\x97\x10\xe3\x18\xc9w\xcc\x13\xc7\x186\x8cJ\xdc\x02\xb7K\xc9\xcfL\xf8\x11\x8e\xfe\x1ao\x93")
+	rtmr1 := []byte("\x952\x8d\xff\x96\xc9\xd6\xc5T\xa4\x01\x98eX|\xf1~\xccw\xffH\xa9}\xec^R\xe0a\xe58\xbd\x13\xc0\xb7\xf2 ~\xc4\x06|\xb6m\xbe:\x9c\x99\xda'")
+	rtmr2 := []byte("\x81\x93\xfdM\xa6-`\xabe\x97\xfc*S˨z\x85\xa9\xa5\xf0\x97\x9f\xd5\xcag\r\x15\xa0x \xe3/\xf6M\xa4i\x9a\xe8+O*`\x05\xaau\xc4x\xd5")
+	rtmr3 := []byte("\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+	mrs := []register.MR{
+		register.RTMR{Index: 0, Digest: rtmr0},
+		register.RTMR{Index: 1, Digest: rtmr1},
+		register.RTMR{Index: 2, Digest: rtmr2},
+		register.RTMR{Index: 3, Digest: rtmr3},
 	}
 	events, err := tcg.ParseAndReplay(elBytes, mrs, tcg.ParseOpts{AllowPadding: true})
 	if err != nil {
@@ -303,14 +333,22 @@ func TestExtractFirmwareLogStateTPM(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			hash, evts := getTPMELEvents(t)
-			tc.mutate(evts)
-			fs, err := FirmwareLogState(evts, hash, TPMRegisterConfig, Opts{Loader: GRUB})
-			if (err != nil) != tc.expectErr {
-				t.Errorf("ExtractFirmwareLogState(%v) = got %v, wantErr: %v", tc.name, err, tc.expectErr)
+			eventGetters := map[string]func(*testing.T) (crypto.Hash, []tcg.Event){
+				"singleBoot":   getTPMELEvents,
+				"multipleBoot": getTPMELEventsWithMultipleBootAttempts,
 			}
-			if fs.LogType != pb.LogType_LOG_TYPE_TCG2 {
-				t.Errorf("FirmwareLogState(%v) = got LogType %v, want LogType: %v", tc.name, fs.LogType, pb.LogType_LOG_TYPE_TCG2)
+			for name, getEvents := range eventGetters {
+				t.Run(name, func(t *testing.T) {
+					hash, evts := getEvents(t)
+					tc.mutate(evts)
+					fs, err := FirmwareLogState(evts, hash, TPMRegisterConfig, Opts{Loader: GRUB})
+					if (err != nil) != tc.expectErr {
+						t.Errorf("FirmwareLogState() = got %v, wantErr: %v", err, tc.expectErr)
+					}
+					if err == nil && fs.LogType != pb.LogType_LOG_TYPE_TCG2 {
+						t.Errorf("FirmwareLogState() = got LogType %v, want LogType: %v", fs.LogType, pb.LogType_LOG_TYPE_TCG2)
+					}
+				})
 			}
 		})
 	}
@@ -552,6 +590,46 @@ func getTPMELEvents(t *testing.T) (crypto.Hash, []tcg.Event) {
 		8:  decodeHex("6932a3f71dc55ad3c1a6ac2196eeac26a1b7164b6bbfa106625d94088ec3ecc3"),
 		9:  decodeHex("ce08798b283c7a0ddc5e9ad1d602304b945b741fc60c20e254eafa0f4782512b"),
 		14: decodeHex("306f9d8b94f17d93dc6e7cf8f5c79d652eb4c6c4d13de2dddc24af416e13ecaf"),
+	})
+	cryptoHash, err := bank.CryptoHash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := tcg.ParseAndReplay(log, bank.MRs(), tcg.ParseOpts{})
+	if err != nil {
+		t.Fatal(err)
+
+	}
+	return cryptoHash, events
+}
+
+func getTPMELEventsWithMultipleBootAttempts(t *testing.T) (crypto.Hash, []tcg.Event) {
+	log := testdata.Ubuntu2404IntelTdxEventLog
+	bank := testutil.MakePCRBank(pb.HashAlgo_SHA384, map[uint32][]byte{
+		0:  decodeHex("592b3f42ec556a9c093f201124cc7313fdaa4ce40ae1602e14d51f18fbfc480d6a1e196d1c52ad919328410272dc7222"),
+		1:  decodeHex("ba1ac69c213175dc72db1493bd5bdfa4799028fe5d5c2bb41ddccc6affa50ba01f189d4639a77afbedd6dd6aff1af3b4"),
+		2:  decodeHex("3d29b768ef16e5d7b775ff0397d9d1d22ec83078d1a26ae103de671b6906f0688d713844db3b84783235246e1b564257"),
+		3:  decodeHex("518923b0f955d08da077c96aaba522b9decede61c599cea6c41889cfbea4ae4d50529d96fe4d1afdafb65e7f95bf23c4"),
+		4:  decodeHex("1213ef15e54d13181724275c16f22f89f866ba2c5b3d24a99a79e4962af4126a8b220c22429fde6e747a4bc4378b556d"),
+		5:  decodeHex("c50b529497c7f441ea47305587d6ce83e2e31f7b4fab6c13dc0b0c3c900e1d0caf0768321100927862df142bf0465ee4"),
+		6:  decodeHex("518923b0f955d08da077c96aaba522b9decede61c599cea6c41889cfbea4ae4d50529d96fe4d1afdafb65e7f95bf23c4"),
+		7:  decodeHex("3ee5663e4119df40192276ff9749a3cd339c489ebc2ab6fd65b11b12a4845d82f4a93bca684126f382feed3324fca561"),
+		8:  decodeHex("58b0d4e1a9d3cb21342f0574312c49748f30d30ede290465e79d5238cf76f60d0c89054c5524e7cb1504555913f31efb"),
+		9:  decodeHex("8d799e8eb5bdf56009f435adb4238158951e9cf95fd05a9c1bfd3c60eecab5ea0c9d63a2c90ec20b30435f894e8d33db"),
+		10: decodeHex("fce98e2810c72187e60a9f83f4e05309a6395a72fb50a366602551227973df5df0c6ef42d9158d94719f4d3f6fdc5be3"),
+		11: decodeHex("000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		12: decodeHex("000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		13: decodeHex("000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		14: decodeHex("937437d07298010015f4598395c9f8dc202ef36e0be3897bba89874bf612b5da092beadfe37f79714a60193819e384ad"),
+		15: decodeHex("000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		16: decodeHex("000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		17: decodeHex("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+		18: decodeHex("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+		19: decodeHex("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+		20: decodeHex("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+		21: decodeHex("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+		22: decodeHex("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
+		23: decodeHex("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 	})
 	cryptoHash, err := bank.CryptoHash()
 	if err != nil {

@@ -45,6 +45,8 @@ var (
 	Cos121AmdSevEventLog []byte
 	//go:embed eventlogs/tpm/gdc-host.bin
 	GdcHost []byte
+	//go:embed eventlogs/tpm/ubuntu-2404-intel-tdx.bin
+	Ubuntu2404IntelTdxEventLog []byte
 )
 
 // Kernel command lines from event logs.
