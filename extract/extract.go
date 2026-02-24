@@ -391,11 +391,11 @@ func EfiState(hash crypto.Hash, events []tcg.Event, registerCfg registerConfig, 
 				if !event.DigestVerified() {
 					return nil, fmt.Errorf("unverified CallingEFIApp digest for %s%d", registerCfg.Name, index)
 				}
-				// Multiple boot attempts are supported now since hardware (like CA4) can consider local
-				// SSDs as boot options. Thus, firmware events may replay multiple times and there's a need
-				// to reset the seenCallingEfiApp flag when returning from EFI application. But, there
-				// shouldn't be multiple successful boot attempts, so we return an error if we see a second
-				// CallingEFIApp event without a ReturningFromEFIApp event in between.
+				// Multiple boot attempts are supported now since hardware can consider local SSDs as boot options.
+				// Thus, firmware events may replay multiple times and there's a need to reset the seenCallingEfiApp
+				// flag when returning from EFI application. But, there shouldn't be multiple successful boot
+				// attempts, so we return an error if we see a second CallingEFIApp event without a
+				// ReturningFromEFIApp event in between.
 				// Referenced from Section 10.4.4 EV_EFI_ACTION Event Types from TCG doc -
 				// https://trustedcomputinggroup.org/wp-content/uploads/TCG-PC-Client-PFP-Version-1.06-Revision-49_31July2023.pdf
 				if seenCallingEfiApp {
@@ -409,6 +409,9 @@ func EfiState(hash crypto.Hash, events []tcg.Event, registerCfg registerConfig, 
 				}
 				if !event.DigestVerified() {
 					return nil, fmt.Errorf("unverified ReturningFromEFIApp digest for %s%d", registerCfg.Name, index)
+				}
+				if !seenCallingEfiApp {
+					return nil, fmt.Errorf("found ReturningFromEFIApp event in %s%d before CallingEFIApp event", registerCfg.Name, index)
 				}
 				// If a boot fails, a "Returning from EFI Application" event is expected for a corresponding
 				// "Calling the EFI Application" event. So reset the seenCallingEfiApp flag on returning.
