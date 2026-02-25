@@ -47,6 +47,10 @@ func TestReplayAndExtract(t *testing.T) {
 			opts:    extract.Opts{Loader: extract.GRUB},
 			wantErr: true,
 		},
+		{
+			el:   COS113TDX,
+			opts: extract.Opts{Loader: extract.GRUB, SkipACPITableCheck: true},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.el.fname+strconv.FormatBool(tt.wantErr), func(t *testing.T) {
@@ -55,7 +59,12 @@ func TestReplayAndExtract(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			_, err = ReplayAndExtract(tableBytes, elBytes, register.RTMRBank{RTMRs: tt.el.rtmrs}, tt.opts)
+			tb := tableBytes
+			if tt.opts.SkipACPITableCheck {
+				tb = []byte("invalid table")
+			}
+
+			_, err = ReplayAndExtract(tb, elBytes, register.RTMRBank{RTMRs: tt.el.rtmrs}, tt.opts)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReplayAndExtract: got %v, wantErr %v", err, tt.wantErr)
 			}

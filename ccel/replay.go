@@ -38,12 +38,14 @@ import (
 // trusted. Users can establish trust in RTMR values by either calling
 // client.ReadRTMRs() themselves or by verifying the values via a RTMR quote.
 func ReplayAndExtract(acpiTableFile []byte, rawEventLog []byte, rtmrBank register.RTMRBank, opts extract.Opts) (*pb.FirmwareLogState, error) {
-	table, err := parseCCELACPITable(acpiTableFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse CCEL ACPI Table file: %v", err)
-	}
-	if table.CCType != TDX {
-		return nil, fmt.Errorf("only TDX Confidential Computing event logs are supported: received %v", table.CCType)
+	if !opts.SkipACPITableCheck {
+		table, err := parseCCELACPITable(acpiTableFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse CCEL ACPI Table file: %v", err)
+		}
+		if table.CCType != TDX {
+			return nil, fmt.Errorf("only TDX Confidential Computing event logs are supported: received %v", table.CCType)
+		}
 	}
 
 	cryptoHash, err := rtmrBank.CryptoHash()

@@ -65,6 +65,8 @@ type Opts struct {
 	// "Calling EFI Application from Boot Option". This option is useful when
 	// the host platform loads EFI Applications unrelated to OS boot.
 	AllowEFIAppBeforeCallingEvent bool
+	// SkipACPITableCheck drops the check of the ACPI table.
+	SkipACPITableCheck bool
 }
 
 // FirmwareLogState extracts event info from a verified TCG PC Client event
