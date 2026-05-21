@@ -255,3 +255,24 @@ func fakeRotExtender(rot register.FakeROT) MRExtender {
 		})
 	}
 }
+
+// TestOversizeTLVValueLength is a regression test for a pre-fix OOM condition:
+// unmarshalFirstTLV allocated make([]byte, valueLength) without any bounds check,
+// allowing a 5-byte crafted TLV (1 type byte + 4-byte uint32 length) to trigger
+// a multi-gigabyte allocation. The fix adds the maxTLVValueSize guard.
+func TestOversizeTLVValueLength(t *testing.T) {
+	// 5-byte crafted TLV: type=0x00, length=maxTLVValueSize+1, no value bytes.
+	var buf bytes.Buffer
+	buf.WriteByte(0x00) // recnum type
+	oversize := maxTLVValueSize + 1
+	buf.WriteByte(byte(oversize >> 24))
+	buf.WriteByte(byte(oversize >> 16))
+	buf.WriteByte(byte(oversize >> 8))
+	buf.WriteByte(byte(oversize))
+
+	_, err := unmarshalFirstTLV(&buf)
+	if err == nil {
+		t.Fatal("unmarshalFirstTLV should return an error for oversize valueLength")
+	}
+	t.Logf("correctly rejected oversize TLV: %v", err)
+}

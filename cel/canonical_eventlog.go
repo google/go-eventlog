@@ -38,6 +38,12 @@ const (
 
 	recnumValueLength   uint32 = 8 // support up to 2^64 records
 	regIndexValueLength uint32 = 1 // support up to 256 registers
+
+	// maxTLVValueSize caps the allocation in unmarshalFirstTLV to prevent an
+	// out-of-memory condition when parsing attacker-controlled CEL data.
+	// The largest legitimate TLV value in a CEL record is the content field,
+	// which is bounded well below 1 MiB in practice.
+	maxTLVValueSize uint32 = 1 << 20 // 1 MiB
 )
 
 // MRExtender extends an implementation-specific measurement register at the
@@ -96,6 +102,9 @@ func unmarshalFirstTLV(buf *bytes.Buffer) (tlv TLV, err error) {
 		return TLV{}, io.EOF
 	}
 	valueLength := binary.BigEndian.Uint32(lengthBytes)
+	if valueLength > maxTLVValueSize {
+		return TLV{}, fmt.Errorf("TLV value length %d exceeds maximum %d", valueLength, maxTLVValueSize)
+	}
 	data = append(data, lengthBytes...)
 
 	valueBytes := make([]byte, valueLength)
