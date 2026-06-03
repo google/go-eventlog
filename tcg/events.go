@@ -471,11 +471,38 @@ func parseEfiSignatureList(b []byte) ([]x509.Certificate, [][]byte, error) {
 		if signatures.Header.SignatureListSize > maxDataLen {
 			return nil, nil, fmt.Errorf("signature list too large: %d > %d", signatures.Header.SignatureListSize, maxDataLen)
 		}
+		// Guard against uint32 underflow / OOM / hash injection: SignatureListSize,
+		// SignatureSize and SignatureHeaderSize are attacker-controlled. Without these
+		// checks the subtractions below (SignatureListSize-28, SignatureSize-16) wrap
+		// around (infinite loop / ~4 GiB make([]byte, ...)), and the vendor
+		// SignatureHeader bytes are misread as signature entries, allowing a crafted
+		// event log to inject arbitrary hashes/certs into the trusted db/dbx list.
+		// Mirrors the fix in google/go-attestation (GHSA-9r4w-jg96-92mv); per UEFI
+		// spec section 31.4.1 the SignatureHeaderSize vendor bytes appear between the
+		// fixed header and the signature entries and MUST be skipped.
+		if signatures.Header.SignatureListSize < 28 {
+			return nil, nil, fmt.Errorf("SignatureListSize %d is smaller than the minimum header size of 28", signatures.Header.SignatureListSize)
+		}
+		if signatures.Header.SignatureSize < 16 {
+			return nil, nil, fmt.Errorf("SignatureSize %d is smaller than the minimum entry size of 16", signatures.Header.SignatureSize)
+		}
+		remainingListSize := signatures.Header.SignatureListSize - 28
+		if signatures.Header.SignatureSize > remainingListSize {
+			return nil, nil, fmt.Errorf("SignatureSize %d exceeds remaining signature list space %d", signatures.Header.SignatureSize, remainingListSize)
+		}
+		if signatures.Header.SignatureHeaderSize >= remainingListSize {
+			return nil, nil, fmt.Errorf("SignatureHeaderSize %d exceeds remaining signature list space %d", signatures.Header.SignatureHeaderSize, remainingListSize)
+		}
+		if signatures.Header.SignatureHeaderSize > 0 {
+			if _, err := buf.Seek(int64(signatures.Header.SignatureHeaderSize), io.SeekCurrent); err != nil {
+				return nil, nil, fmt.Errorf("seeking past signature vendor header: %w", err)
+			}
+		}
 
 		signatureType := signatures.Header.SignatureType
 		switch signatureType {
 		case certX509SigGUID: // X509 certificate
-			for sigOffset := 0; uint32(sigOffset) < signatures.Header.SignatureListSize-28; {
+			for sigOffset := int(signatures.Header.SignatureHeaderSize); uint32(sigOffset) < signatures.Header.SignatureListSize-28; {
 				signature := efiSignatureData{}
 				signature.SignatureData = make([]byte, signatures.Header.SignatureSize-16)
 				err := binary.Read(buf, binary.LittleEndian, &signature.SignatureOwner)
@@ -494,7 +521,7 @@ func parseEfiSignatureList(b []byte) ([]x509.Certificate, [][]byte, error) {
 				certificates = append(certificates, *cert)
 			}
 		case hashSHA256SigGUID: // SHA256
-			for sigOffset := 0; uint32(sigOffset) < signatures.Header.SignatureListSize-28; {
+			for sigOffset := int(signatures.Header.SignatureHeaderSize); uint32(sigOffset) < signatures.Header.SignatureListSize-28; {
 				signature := efiSignatureData{}
 				signature.SignatureData = make([]byte, signatures.Header.SignatureSize-16)
 				err := binary.Read(buf, binary.LittleEndian, &signature.SignatureOwner)
