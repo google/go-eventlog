@@ -49,6 +49,8 @@ var (
 	Ubuntu2404IntelTdxA4HighGpu8GEventLog []byte
 	//go:embed eventlogs/tpm/cos-125-intel-tdx-secure-boot.bin
 	Cos125IntelTdxSecureBootA4HighGpu8GEventLog []byte
+	//go:embed eventlogs/tpm/host-gmes.bin
+	HostGMESEventLog []byte
 )
 
 // Kernel command lines from event logs.

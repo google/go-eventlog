@@ -222,8 +222,9 @@ message FirmwareLogState {
 
 // The verified state of Google measurements on the machine.
 message GMESState {
-  string bmc_firmware = 1;
-  string bios = 2;
-  string host_kernel = 3;
-  string mbm = 4;
+  bytes bmc_firmware_digest = 1;
+
+  bytes bios_digest = 2;
+
+  bytes host_kernel_digest = 3;
 }

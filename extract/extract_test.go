@@ -27,13 +27,13 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	gmes "github.com/google/go-eventlog/extract/gmes"
 	"github.com/google/go-eventlog/internal/testutil"
 	"github.com/google/go-eventlog/register"
 	"github.com/google/go-eventlog/tcg"
 	"github.com/google/go-eventlog/testdata"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
 
 	pb "github.com/google/go-eventlog/proto/state"
 )
@@ -678,95 +678,131 @@ func decodeHex(hexStr string) []byte {
 }
 
 func TestGMESState(t *testing.T) {
-	expectedState := &pb.GMESState{
-		Bios:        "TestBIOS",
-		Mbm:         "TestMBM",
-		BmcFirmware: "TestBMC",
-		HostKernel:  "TestKernel",
-	}
-
-	validEvents := []tcg.Event{
-		newGMESEvent(t, gmes.PCRConfig.BIOSIdx, gmes.MeasurementTagConfig.BIOS, expectedState.Bios),
-		newSeparatorEvent(t, gmes.PCRConfig.BIOSIdx),
-		newGMESEvent(t, gmes.PCRConfig.MBMIdx, gmes.MeasurementTagConfig.MBM, expectedState.Mbm),
-		newSeparatorEvent(t, gmes.PCRConfig.MBMIdx),
-		newGMESEvent(t, gmes.PCRConfig.BMCFirmwareIdx, gmes.MeasurementTagConfig.BMCFirmware, expectedState.BmcFirmware),
+	separatorEvents := []tcg.Event{
 		newSeparatorEvent(t, gmes.PCRConfig.BMCFirmwareIdx),
-		newGMESEvent(t, gmes.PCRConfig.HostKernelIdx, gmes.MeasurementTagConfig.HostKernel, expectedState.HostKernel),
+		newSeparatorEvent(t, gmes.PCRConfig.BIOSIdx),
 		newSeparatorEvent(t, gmes.PCRConfig.HostKernelIdx),
 	}
 
+	bmcEvent := newEvent(t, gmes.PCRConfig.BMCFirmwareIdx, tcg.EFIHCRTMEvent, []byte(gmes.BMCData))
+	biosEvent := newEvent(t, gmes.PCRConfig.BIOSIdx, tcg.GoogleDRTMEvent, []byte(gmes.BIOSData))
+	kernelEvent := newEFIImageLoadEvent(t, gmes.PCRConfig.HostKernelIdx, 0x1000, 0x2000, 0x3000, []byte("test-dev-path"))
+
+	validEvents := append([]tcg.Event{
+		bmcEvent,
+		biosEvent,
+		kernelEvent,
+	}, separatorEvents...)
+
+	// We need to ensure events are replayed correctly.
+	events := getEventsFromLog(t, validEvents)
+
+	gotState, err := GMESState(crypto.SHA256, events)
+	if err != nil {
+		t.Fatalf("GMESState() error = %v", err)
+	}
+
+	expectedState := &pb.GMESState{
+		BmcFirmwareDigest: bmcEvent.Digest,
+		BiosDigest:        biosEvent.Digest,
+		HostKernelDigest:  kernelEvent.Digest,
+	}
+
+	if diff := cmp.Diff(gotState, expectedState, protocmp.Transform()); diff != "" {
+		t.Errorf("GMESState() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestGMESStateErrors(t *testing.T) {
+	separatorEvents := []tcg.Event{
+		newSeparatorEvent(t, gmes.PCRConfig.BMCFirmwareIdx),
+		newSeparatorEvent(t, gmes.PCRConfig.BIOSIdx),
+		newSeparatorEvent(t, gmes.PCRConfig.HostKernelIdx),
+	}
+
+	validEvents := append([]tcg.Event{
+		newEvent(t, gmes.PCRConfig.BMCFirmwareIdx, tcg.EFIHCRTMEvent, []byte(gmes.BMCData)),
+		newEvent(t, gmes.PCRConfig.BIOSIdx, tcg.GoogleDRTMEvent, []byte(gmes.BIOSData)),
+		newEFIImageLoadEvent(t, gmes.PCRConfig.HostKernelIdx, 0x1000, 0x2000, 0x3000, []byte("test-dev-path")),
+	}, separatorEvents...)
+
 	testcases := []struct {
-		name          string
-		events        []tcg.Event
-		expectedState *pb.GMESState
+		name           string
+		events         []tcg.Event
+		expectedErrStr string
 	}{
 		{
-			name:          "valid events",
-			events:        validEvents,
-			expectedState: expectedState,
+			name:           "duplicate separator",
+			events:         append(validEvents, newSeparatorEvent(t, gmes.PCRConfig.BMCFirmwareIdx)),
+			expectedErrStr: "duplicate separator event",
 		},
 		{
-			name:          "duplicate separator",
-			events:        append(validEvents, newSeparatorEvent(t, gmes.PCRConfig.HostKernelIdx)),
-			expectedState: nil, // Expect failure.
+			name: "event after separator",
+			events: append(validEvents,
+				newEvent(t, gmes.PCRConfig.HostKernelIdx, tcg.EFIBootServicesApplication, []byte("ModifiedKernel")),
+			),
+			expectedErrStr: "found event after separator",
 		},
 		{
-			name:          "invalid tag",
-			events:        []tcg.Event{newGMESEvent(t, gmes.PCRConfig.BIOSIdx, 9999, "InvalidTag")},
-			expectedState: nil, // Expect failure.
+			name: "invalid BMC event type",
+			events: append([]tcg.Event{
+				newEvent(t, gmes.PCRConfig.BMCFirmwareIdx, tcg.GoogleDRTMEvent, []byte(gmes.BMCData)),
+			}, separatorEvents...),
+			expectedErrStr: "unexpected event type for BMC firmware",
 		},
 		{
-			name:          "event after separator ignored",
-			events:        append(validEvents, newGMESEvent(t, gmes.PCRConfig.HostKernelIdx, gmes.MeasurementTagConfig.HostKernel, "ModifiedKernel")),
-			expectedState: expectedState, // Should ignore the modified event after the separator.
+			name: "invalid BIOS event type",
+			events: append([]tcg.Event{
+				newEvent(t, gmes.PCRConfig.BIOSIdx, tcg.EFIHCRTMEvent, []byte(gmes.BIOSData)),
+			}, separatorEvents...),
+			expectedErrStr: "unexpected event type for BIOS",
+		},
+		{
+			name: "invalid Host Kernel event type",
+			events: append([]tcg.Event{
+				newEvent(t, gmes.PCRConfig.HostKernelIdx, tcg.GoogleDRTMEvent, []byte("testhostkernel")),
+				newSeparatorEvent(t, gmes.PCRConfig.HostKernelIdx),
+			}, separatorEvents...),
+			expectedErrStr: "unexpected event type for host kernel",
+		},
+		{
+			name: "unknown MR index",
+			events: append([]tcg.Event{
+				newEvent(t, 999, tcg.EFIHCRTMEvent, []byte("unknown data")),
+			}, separatorEvents...),
+			expectedErrStr: "unknown MR index",
+		},
+		{
+			name: "missing separators",
+			events: []tcg.Event{
+				newEvent(t, gmes.PCRConfig.BMCFirmwareIdx, tcg.EFIHCRTMEvent, []byte(gmes.BMCData)),
+				newEvent(t, gmes.PCRConfig.BIOSIdx, tcg.GoogleDRTMEvent, []byte(gmes.BIOSData)),
+			},
+			expectedErrStr: "missing separator event",
 		},
 	}
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			gotState, err := GMESState(crypto.SHA256, getEventsFromLog(t, tc.events))
-
-			if (err != nil) != (tc.expectedState == nil) {
-				t.Fatalf("GMESState() error = %v, wantErr: %v", err, tc.expectedState == nil)
+			_, err := GMESState(crypto.SHA256, getEventsFromLog(t, tc.events))
+			if err == nil {
+				t.Fatalf("GMESState() expected error containing %q, but got nil", tc.expectedErrStr)
 			}
 
-			if tc.expectedState != nil && !cmp.Equal(gotState, tc.expectedState, cmpopts.IgnoreUnexported(pb.GMESState{})) {
-				t.Errorf("GMESState() = got %+v, want %+v", gotState, tc.expectedState)
+			if !strings.Contains(err.Error(), tc.expectedErrStr) {
+				t.Errorf("GMESState() expected error containing %q, but got %v", tc.expectedErrStr, err)
 			}
 		})
 	}
 }
 
-// encodeGMESEventData packages content into the Google Measurement Event Structure
-// and wraps it in a TCG Tagged Event structure.
-func encodeGMESEventData(t *testing.T, tag uint32, content []byte) []byte {
+// newEvent creates a tcg.Event containing a GMES measurement.
+func newEvent(t *testing.T, mrIndex uint32, eventType tcg.EventType, data []byte) tcg.Event {
 	t.Helper()
-	// Create GMES MeasurementEvent data
-	gmesBuf := new(bytes.Buffer)
-	binary.Write(gmesBuf, binary.LittleEndian, uint32(1))            // Version
-	binary.Write(gmesBuf, binary.LittleEndian, tag)                  // Tag
-	binary.Write(gmesBuf, binary.LittleEndian, uint32(len(content))) // Size
-	gmesBuf.Write(content)
-	gmesData := gmesBuf.Bytes()
-
-	// Wrap in TCG_PCClientTaggedEventStruct
-	taggedBuf := new(bytes.Buffer)
-	binary.Write(taggedBuf, binary.LittleEndian, gmes.EventID)          // ID
-	binary.Write(taggedBuf, binary.LittleEndian, uint32(len(gmesData))) // DataLen
-	taggedBuf.Write(gmesData)
-
-	return taggedBuf.Bytes()
-}
-
-// newGMESEvent creates a tcg.Event containing a GMES measurement.
-func newGMESEvent(t *testing.T, mrIndex uint32, tag uint32, content string) tcg.Event {
-	t.Helper()
-	data := encodeGMESEventData(t, tag, []byte(content))
 	digest := sha256.Sum256(data)
 	return tcg.Event{
 		Index:  int(mrIndex),
-		Type:   tcg.EventTag,
+		Type:   eventType,
 		Data:   data,
 		Digest: digest[:],
 	}
@@ -783,6 +819,25 @@ func newSeparatorEvent(t *testing.T, mrIndex uint32) tcg.Event {
 		Data:   data,
 		Digest: digest[:],
 	}
+}
+
+// newEFIImageLoadEvent creates a tcg.Event containing an EFI image load event.
+func newEFIImageLoadEvent(t *testing.T, mrIndex uint32, loadAddr, length, linkAddr uint64, devPathData []byte) tcg.Event {
+	t.Helper()
+	header := tcg.EFIImageLoadHeader{
+		LoadAddr:      loadAddr,
+		Length:        length,
+		LinkAddr:      linkAddr,
+		DevicePathLen: uint64(len(devPathData)),
+	}
+	buf := new(bytes.Buffer)
+	if err := binary.Write(buf, binary.LittleEndian, header); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buf.Write(devPathData); err != nil {
+		t.Fatal(err)
+	}
+	return newEvent(t, mrIndex, tcg.EFIBootServicesApplication, buf.Bytes())
 }
 
 // getEventsFromLog takes a slice of events and returns a slice of verified events
@@ -834,7 +889,13 @@ func getEventsFromLog(t *testing.T, events []tcg.Event) []tcg.Event {
 			h.Write(current)
 		} else {
 			// First event for this PCR - initialize with zeros.
+			// Note this is a simplification for some PCRs. PCRs 17-23 are initialized with 0xFF but
+			// the DRTM event clears the index to 0x00 before extending. Starting with 0x00 is functionally
+			// the same because DRTM is always the first event, but this is subtly different from the spec.
 			initial := make([]byte, h.Size())
+			if e.Type == tcg.EFIHCRTMEvent {
+				initial[len(initial)-1] = 0x04
+			}
 			h.Write(initial)
 		}
 		h.Write(e.Digest)

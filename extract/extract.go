@@ -521,7 +521,6 @@ func GMESState(hash crypto.Hash, events []tcg.Event) (*pb.GMESState, error) {
 	state := &pb.GMESState{}
 	seenSeparators := map[uint32]bool{
 		gmes.PCRConfig.BMCFirmwareIdx: false,
-		gmes.PCRConfig.MBMIdx:         false,
 		gmes.PCRConfig.BIOSIdx:        false,
 		gmes.PCRConfig.HostKernelIdx:  false,
 	}
@@ -558,67 +557,44 @@ func GMESState(hash crypto.Hash, events []tcg.Event) (*pb.GMESState, error) {
 		}
 
 		if seen, ok := seenSeparators[event.MRIndex()]; ok && seen {
-			// Don't trust any events for the index after separator.
-			continue
-		}
-
-		if eventType != tcg.EventTag {
-			// Ignore non-Tag events since GMES events are expected to be in Tag format.
-			continue
-		}
-
-		// Verify event digest matches event data.
-		if err := DigestEquals(event, event.RawData()); err != nil {
-			return nil, fmt.Errorf("invalid digest at event %d: %v", event.Num(), err)
-		}
-
-		// Parse PCCClient Tagged Event from event data.
-		taggedEvent, err := tcg.ParseTaggedEventData(event.RawData())
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse PCCClient Tagged Event at event %d: %v", event.Num(), err)
-		}
-
-		if taggedEvent.ID != gmes.EventID {
-			return nil, fmt.Errorf("unexpected event ID at event %d: %v", event.Num(), taggedEvent.ID)
-		}
-
-		// Parse Google Measurement Event Structure.
-		gmesEvent, err := gmes.ParseEvent(taggedEvent.Data)
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("found event after separator for MR%d at event %d", event.MRIndex(), event.Num())
 		}
 
 		registerCfg := gmes.PCRConfig
-		// TODO: switch to real measurement tag config once we have a suitable event log.
-		tagCfg := gmes.MeasurementTagConfig
-
 		switch event.MRIndex() {
 		case registerCfg.BMCFirmwareIdx:
-			if gmesEvent.Tag != tagCfg.BMCFirmware {
-				return nil, fmt.Errorf("unexpected measurement tag at event %d: %v", event.Num(), gmesEvent.Tag)
+			if eventType != tcg.EFIHCRTMEvent {
+				return nil, fmt.Errorf("unexpected event type for BMC firmware event: %d", eventType)
 			}
-			state.BmcFirmware = string(gmesEvent.Content)
-
-		case registerCfg.MBMIdx:
-			if gmesEvent.Tag != tagCfg.MBM {
-				return nil, fmt.Errorf("unexpected measurement tag at event %d: %v", event.Num(), gmesEvent.Tag)
-			}
-			state.Mbm = string(gmesEvent.Content)
+			state.BmcFirmwareDigest = event.ReplayedDigest()
 
 		case registerCfg.BIOSIdx:
-			if gmesEvent.Tag != tagCfg.BIOS {
-				return nil, fmt.Errorf("unexpected measurement tag at event %d: %v", event.Num(), gmesEvent.Tag)
+			if eventType != tcg.GoogleDRTMEvent {
+				return nil, fmt.Errorf("unexpected event type for BIOS event: %d", eventType)
 			}
-			state.Bios = string(gmesEvent.Content)
+			state.BiosDigest = event.ReplayedDigest()
 
 		case registerCfg.HostKernelIdx:
-			if gmesEvent.Tag != tagCfg.HostKernel {
-				return nil, fmt.Errorf("unexpected measurement tag at event %d: %v", event.Num(), gmesEvent.Tag)
+			if eventType != tcg.EFIBootServicesApplication {
+				return nil, fmt.Errorf("unexpected event type for host kernel event: %d", eventType)
 			}
-			state.HostKernel = string(gmesEvent.Content)
+			state.HostKernelDigest = event.ReplayedDigest()
+
+			// Parse & populate image load event.
+			_, err := tcg.ParseEFIImageLoad(bytes.NewReader(event.RawData()))
+			if err != nil {
+				return nil, fmt.Errorf("failed parsing EFI image load at host kernel event %d: %v", event.Num(), err)
+			}
 
 		default:
 			return nil, fmt.Errorf("unknown MR index: %d", event.MRIndex())
+		}
+	}
+
+	// Confirm separators were found.
+	for mrIndex, seen := range seenSeparators {
+		if !seen {
+			return nil, fmt.Errorf("missing separator event for MR%d", mrIndex)
 		}
 	}
 
