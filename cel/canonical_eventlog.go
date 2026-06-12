@@ -65,6 +65,10 @@ func (t TLV) MarshalBinary() (data []byte, err error) {
 
 // UnmarshalBinary unmarshal a byte slice to a TLV.
 func (t *TLV) UnmarshalBinary(data []byte) error {
+	if len(data) < tlvTypeFieldLength+tlvLengthFieldLength {
+		return io.EOF
+	}
+
 	valueLength := binary.BigEndian.Uint32(data[tlvTypeFieldLength : tlvTypeFieldLength+tlvLengthFieldLength])
 
 	if valueLength != uint32(len(data[tlvTypeFieldLength+tlvLengthFieldLength:])) {
@@ -97,6 +101,9 @@ func unmarshalFirstTLV(buf *bytes.Buffer) (tlv TLV, err error) {
 	}
 	valueLength := binary.BigEndian.Uint32(lengthBytes)
 	data = append(data, lengthBytes...)
+	if valueLength > uint32(buf.Len()) {
+		return TLV{}, io.EOF
+	}
 
 	valueBytes := make([]byte, valueLength)
 	bytesRead, err = buf.Read(valueBytes)
