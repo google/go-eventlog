@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"crypto"
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"reflect"
 	"testing"
 
@@ -224,6 +226,61 @@ func TestCELAppendFailBadMRType(t *testing.T) {
 				t.Errorf("AppendEvent(MRType %v): got %v, expectErr %v", tc.mrT, err, tc.expectErr)
 			}
 		})
+	}
+}
+
+func TestUnmarshalFirstTLVLengthLargerThanAvailableValue(t *testing.T) {
+	value := []byte{0xaa, 0xbb, 0xcc}
+	buf := bytes.NewBuffer(nil)
+	buf.WriteByte(0x7f)
+
+	lengthField := make([]byte, tlvLengthFieldLength)
+	binary.BigEndian.PutUint32(lengthField, uint32(len(value)+1))
+	buf.Write(lengthField)
+	buf.Write(value)
+
+	_, err := unmarshalFirstTLV(buf)
+	if err == nil {
+		t.Fatal("unmarshalFirstTLV() got nil err, want io.EOF")
+	}
+	if err != io.EOF {
+		t.Fatalf("unmarshalFirstTLV() error = %v, want io.EOF", err)
+	}
+}
+
+func TestUnmarshalFirstTLVLengthEqualsAvailableValue(t *testing.T) {
+	value := []byte{0xaa, 0xbb, 0xcc}
+	buf := bytes.NewBuffer(nil)
+	buf.WriteByte(0x7f)
+
+	lengthField := make([]byte, tlvLengthFieldLength)
+	binary.BigEndian.PutUint32(lengthField, uint32(len(value)))
+	buf.Write(lengthField)
+	buf.Write(value)
+
+	tlv, err := unmarshalFirstTLV(buf)
+	if err != nil {
+		t.Fatalf("unmarshalFirstTLV() error = %v, want nil", err)
+	}
+	if tlv.Type != 0x7f {
+		t.Fatalf("unmarshalFirstTLV() type = %x, want %x", tlv.Type, 0x7f)
+	}
+	if !bytes.Equal(tlv.Value, value) {
+		t.Fatalf("unmarshalFirstTLV() value = %x, want %x", tlv.Value, value)
+	}
+}
+
+func TestTLVUnmarshalBinaryShortHeader(t *testing.T) {
+	// TLV header is 1 byte type + 4 bytes length; 4 bytes should fail.
+	data := []byte{0x7f, 0x00, 0x00, 0x00}
+
+	var tlv TLV
+	err := tlv.UnmarshalBinary(data)
+	if err == nil {
+		t.Fatal("UnmarshalBinary() got nil err, want io.EOF")
+	}
+	if err != io.EOF {
+		t.Fatalf("UnmarshalBinary() error = %v, want io.EOF", err)
 	}
 }
 
