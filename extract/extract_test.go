@@ -714,17 +714,13 @@ func TestGMESState(t *testing.T) {
 }
 
 func TestGMESStateErrors(t *testing.T) {
-	separatorEvents := []tcg.Event{
-		newSeparatorEvent(t, gmes.PCRConfig.BMCFirmwareIdx),
-		newSeparatorEvent(t, gmes.PCRConfig.BIOSIdx),
-		newSeparatorEvent(t, gmes.PCRConfig.HostKernelIdx),
-	}
-
-	validEvents := append([]tcg.Event{
+	separatorEvent := newSeparatorEvent(t, gmes.PCRConfig.HostKernelIdx)
+	validEvents := []tcg.Event{
 		newEvent(t, gmes.PCRConfig.BMCFirmwareIdx, tcg.EFIHCRTMEvent, []byte(gmes.BMCData)),
 		newEvent(t, gmes.PCRConfig.BIOSIdx, tcg.GoogleDRTMEvent, []byte(gmes.BIOSData)),
 		newEFIImageLoadEvent(t, gmes.PCRConfig.HostKernelIdx, 0x1000, 0x2000, 0x3000, []byte("test-dev-path")),
-	}, separatorEvents...)
+		separatorEvent,
+	}
 
 	testcases := []struct {
 		name           string
@@ -733,7 +729,7 @@ func TestGMESStateErrors(t *testing.T) {
 	}{
 		{
 			name:           "duplicate separator",
-			events:         append(validEvents, newSeparatorEvent(t, gmes.PCRConfig.BMCFirmwareIdx)),
+			events:         append(validEvents, newSeparatorEvent(t, gmes.PCRConfig.HostKernelIdx)),
 			expectedErrStr: "duplicate separator event",
 		},
 		{
@@ -745,40 +741,59 @@ func TestGMESStateErrors(t *testing.T) {
 		},
 		{
 			name: "invalid BMC event type",
-			events: append([]tcg.Event{
+			events: []tcg.Event{
 				newEvent(t, gmes.PCRConfig.BMCFirmwareIdx, tcg.GoogleDRTMEvent, []byte(gmes.BMCData)),
-			}, separatorEvents...),
+				separatorEvent,
+			},
 			expectedErrStr: "unexpected event type for BMC firmware",
 		},
 		{
 			name: "invalid BIOS event type",
-			events: append([]tcg.Event{
+			events: []tcg.Event{
 				newEvent(t, gmes.PCRConfig.BIOSIdx, tcg.EFIHCRTMEvent, []byte(gmes.BIOSData)),
-			}, separatorEvents...),
+				separatorEvent,
+			},
 			expectedErrStr: "unexpected event type for BIOS",
 		},
 		{
 			name: "invalid Host Kernel event type",
-			events: append([]tcg.Event{
+			events: []tcg.Event{
 				newEvent(t, gmes.PCRConfig.HostKernelIdx, tcg.GoogleDRTMEvent, []byte("testhostkernel")),
-				newSeparatorEvent(t, gmes.PCRConfig.HostKernelIdx),
-			}, separatorEvents...),
+				separatorEvent,
+			},
 			expectedErrStr: "unexpected event type for host kernel",
 		},
 		{
 			name: "unknown MR index",
-			events: append([]tcg.Event{
+			events: []tcg.Event{
 				newEvent(t, 999, tcg.EFIHCRTMEvent, []byte("unknown data")),
-			}, separatorEvents...),
+				separatorEvent,
+			},
 			expectedErrStr: "unknown MR index",
 		},
 		{
-			name: "missing separators",
+			name: "missing separator",
 			events: []tcg.Event{
 				newEvent(t, gmes.PCRConfig.BMCFirmwareIdx, tcg.EFIHCRTMEvent, []byte(gmes.BMCData)),
 				newEvent(t, gmes.PCRConfig.BIOSIdx, tcg.GoogleDRTMEvent, []byte(gmes.BIOSData)),
 			},
 			expectedErrStr: "missing separator event",
+		},
+		{
+			name: "extra BMC event",
+			events: append(
+				validEvents,
+				newEvent(t, gmes.PCRConfig.BMCFirmwareIdx, tcg.GoogleDRTMEvent, []byte(gmes.BMCData)),
+			),
+			expectedErrStr: "found duplicate event for MR",
+		},
+		{
+			name: "extra BIOS event",
+			events: append(
+				validEvents,
+				newEvent(t, gmes.PCRConfig.BIOSIdx, tcg.GoogleDRTMEvent, []byte(gmes.BIOSData)),
+			),
+			expectedErrStr: "found duplicate event for MR",
 		},
 	}
 

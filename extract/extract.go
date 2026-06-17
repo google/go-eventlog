@@ -519,10 +519,16 @@ func getGrubKernelCmdlineSuffix(grubCmd []byte) int {
 // GMESState extracts Google Measurement Event Structure (GMES) information from a TCG event log.
 func GMESState(hash crypto.Hash, events []tcg.Event) (*pb.GMESState, error) {
 	state := &pb.GMESState{}
-	seenSeparators := map[uint32]bool{
+
+	// Track seen events for PCRs expecting only one event.
+	seenEvents := map[uint32]bool{
 		gmes.PCRConfig.BMCFirmwareIdx: false,
 		gmes.PCRConfig.BIOSIdx:        false,
-		gmes.PCRConfig.HostKernelIdx:  false,
+	}
+
+	// Track seen separators for PCRs requiring a separator.
+	seenSeparators := map[uint32]bool{
+		gmes.PCRConfig.HostKernelIdx: false,
 	}
 
 	for _, event := range events {
@@ -534,11 +540,7 @@ func GMESState(hash crypto.Hash, events []tcg.Event) (*pb.GMESState, error) {
 		// Handle separator types.
 		if eventType == tcg.Separator {
 			seen, ok := seenSeparators[event.MRIndex()]
-			if !ok { // Skip if not a GMES index.
-				continue
-			}
-
-			if seen {
+			if ok && seen {
 				return nil, fmt.Errorf("duplicate separator event at MR%d", event.MRIndex())
 			}
 
@@ -556,6 +558,12 @@ func GMESState(hash crypto.Hash, events []tcg.Event) (*pb.GMESState, error) {
 			continue
 		}
 
+		// Check for seen events.
+		if seen, ok := seenEvents[event.MRIndex()]; ok && seen {
+			return nil, fmt.Errorf("found duplicate event for MR%d at event %d, expect only one event in register", event.MRIndex(), event.Num())
+		}
+
+		// Check for seen separators.
 		if seen, ok := seenSeparators[event.MRIndex()]; ok && seen {
 			return nil, fmt.Errorf("found event after separator for MR%d at event %d", event.MRIndex(), event.Num())
 		}
@@ -563,12 +571,14 @@ func GMESState(hash crypto.Hash, events []tcg.Event) (*pb.GMESState, error) {
 		registerCfg := gmes.PCRConfig
 		switch event.MRIndex() {
 		case registerCfg.BMCFirmwareIdx:
+			seenEvents[event.MRIndex()] = true
 			if eventType != tcg.EFIHCRTMEvent {
 				return nil, fmt.Errorf("unexpected event type for BMC firmware event: %d", eventType)
 			}
 			state.BmcFirmwareDigest = event.ReplayedDigest()
 
 		case registerCfg.BIOSIdx:
+			seenEvents[event.MRIndex()] = true
 			if eventType != tcg.GoogleDRTMEvent {
 				return nil, fmt.Errorf("unexpected event type for BIOS event: %d", eventType)
 			}
@@ -580,7 +590,7 @@ func GMESState(hash crypto.Hash, events []tcg.Event) (*pb.GMESState, error) {
 			}
 			state.HostKernelDigest = event.ReplayedDigest()
 
-			// Parse & populate image load event.
+			// Parse image load event.
 			_, err := tcg.ParseEFIImageLoad(bytes.NewReader(event.RawData()))
 			if err != nil {
 				return nil, fmt.Errorf("failed parsing EFI image load at host kernel event %d: %v", event.Num(), err)

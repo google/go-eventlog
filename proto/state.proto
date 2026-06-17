@@ -222,9 +222,14 @@ message FirmwareLogState {
 
 // The verified state of Google measurements on the machine.
 message GMESState {
+  // Digest of the BMC firmware digest.
+  // The double digest is due to the measurement being a digest, which is hashed again when extended.
   bytes bmc_firmware_digest = 1;
 
+  // Digest of the BIOS digest.
+  // The double digest is due to the measurement being a digest, which is hashed again when extended.
   bytes bios_digest = 2;
 
+  // Digest of the host kernel.
   bytes host_kernel_digest = 3;
 }

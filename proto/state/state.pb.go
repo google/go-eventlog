@@ -1183,9 +1183,14 @@ type GMESState struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// Digest of the BMC firmware digest.
+	// The double digest is due to the measurement being a digest, which is hashed again when extended.
 	BmcFirmwareDigest []byte `protobuf:"bytes,1,opt,name=bmc_firmware_digest,json=bmcFirmwareDigest,proto3" json:"bmc_firmware_digest,omitempty"`
-	BiosDigest        []byte `protobuf:"bytes,2,opt,name=bios_digest,json=biosDigest,proto3" json:"bios_digest,omitempty"`
-	HostKernelDigest  []byte `protobuf:"bytes,3,opt,name=host_kernel_digest,json=hostKernelDigest,proto3" json:"host_kernel_digest,omitempty"`
+	// Digest of the BIOS digest.
+	// The double digest is due to the measurement being a digest, which is hashed again when extended.
+	BiosDigest []byte `protobuf:"bytes,2,opt,name=bios_digest,json=biosDigest,proto3" json:"bios_digest,omitempty"`
+	// Digest of the host kernel.
+	HostKernelDigest []byte `protobuf:"bytes,3,opt,name=host_kernel_digest,json=hostKernelDigest,proto3" json:"host_kernel_digest,omitempty"`
 }
 
 func (x *GMESState) Reset() {
