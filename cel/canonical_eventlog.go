@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"crypto"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 
@@ -66,7 +67,7 @@ func (t TLV) MarshalBinary() (data []byte, err error) {
 // UnmarshalBinary unmarshal a byte slice to a TLV.
 func (t *TLV) UnmarshalBinary(data []byte) error {
 	if len(data) < tlvTypeFieldLength+tlvLengthFieldLength {
-		return io.EOF
+		return io.ErrUnexpectedEOF
 	}
 
 	valueLength := binary.BigEndian.Uint32(data[tlvTypeFieldLength : tlvTypeFieldLength+tlvLengthFieldLength])
@@ -81,7 +82,7 @@ func (t *TLV) UnmarshalBinary(data []byte) error {
 }
 
 // unmarshalFirstTLV reads and parse the first TLV from the bytes buffer. The function will
-// return io.EOF if the buf ends unexpectedly or cannot fill the TLV.
+// return io.ErrUnexpectedEOF if the buf ends unexpectedly or cannot fill the TLV.
 func unmarshalFirstTLV(buf *bytes.Buffer) (tlv TLV, err error) {
 	typeByte, err := buf.ReadByte()
 	if err != nil {
@@ -97,12 +98,12 @@ func unmarshalFirstTLV(buf *bytes.Buffer) (tlv TLV, err error) {
 		return TLV{}, err
 	}
 	if bytesRead != tlvLengthFieldLength {
-		return TLV{}, io.EOF
+		return TLV{}, io.ErrUnexpectedEOF
 	}
 	valueLength := binary.BigEndian.Uint32(lengthBytes)
 	data = append(data, lengthBytes...)
 	if valueLength > uint32(buf.Len()) {
-		return TLV{}, io.EOF
+		return TLV{}, io.ErrUnexpectedEOF
 	}
 
 	valueBytes := make([]byte, valueLength)
@@ -111,7 +112,7 @@ func unmarshalFirstTLV(buf *bytes.Buffer) (tlv TLV, err error) {
 		return TLV{}, err
 	}
 	if uint32(bytesRead) != valueLength {
-		return TLV{}, io.EOF
+		return TLV{}, io.ErrUnexpectedEOF
 	}
 	data = append(data, valueBytes...)
 
@@ -308,7 +309,7 @@ func unmarshalDigests(tlv TLV) (digestsMap map[crypto.Hash][]byte, err error) {
 
 	for buf.Len() > 0 {
 		digestTLV, err := unmarshalFirstTLV(buf)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 			return nil, fmt.Errorf("buffer ends unexpectedly")
 		} else if err != nil {
 			return nil, err
@@ -382,7 +383,7 @@ func DecodeToCEL(buf *bytes.Buffer) (CEL, error) {
 	var cel eventLog
 	for buf.Len() > 0 {
 		celr, err := decodeToCELR(buf)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 			return &eventLog{}, fmt.Errorf("buffer ends unexpectedly")
 		}
 		if err != nil {

@@ -241,10 +241,10 @@ func TestUnmarshalFirstTLVLengthLargerThanAvailableValue(t *testing.T) {
 
 	_, err := unmarshalFirstTLV(buf)
 	if err == nil {
-		t.Fatal("unmarshalFirstTLV() got nil err, want io.EOF")
+		t.Fatal("unmarshalFirstTLV() got nil err, want io.ErrUnexpectedEOF")
 	}
-	if err != io.EOF {
-		t.Fatalf("unmarshalFirstTLV() error = %v, want io.EOF", err)
+	if err != io.ErrUnexpectedEOF {
+		t.Fatalf("unmarshalFirstTLV() error = %v, want io.ErrUnexpectedEOF", err)
 	}
 }
 
@@ -277,10 +277,10 @@ func TestTLVUnmarshalBinaryShortHeader(t *testing.T) {
 	var tlv TLV
 	err := tlv.UnmarshalBinary(data)
 	if err == nil {
-		t.Fatal("UnmarshalBinary() got nil err, want io.EOF")
+		t.Fatal("UnmarshalBinary() got nil err, want io.ErrUnexpectedEOF")
 	}
-	if err != io.EOF {
-		t.Fatalf("UnmarshalBinary() error = %v, want io.EOF", err)
+	if err != io.ErrUnexpectedEOF {
+		t.Fatalf("UnmarshalBinary() error = %v, want io.ErrUnexpectedEOF", err)
 	}
 }
 
