@@ -72,6 +72,51 @@ func TestCELEncodingDecoding(t *testing.T) {
 	}
 }
 
+func TestCELEncodingDecodingSingleEvent(t *testing.T) {
+	rot, err := register.CreateFakeRot(measuredHashes, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []MRType{PCRType, CCMRType}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("MRType %v", tc), func(t *testing.T) {
+			cel := eventLog{Type: tc}
+
+			fakeEvent1 := FakeTlv{FakeEvent1, []byte("docker.io/bazel/experimental/test:latest")}
+			appendFakeMREventOrFatal(t, &cel, rot, 16, measuredHashes, fakeEvent1)
+
+			var buf bytes.Buffer
+			if err := cel.EncodeCEL(&buf); err != nil {
+				t.Fatal(err)
+			}
+			decodedcel, err := DecodeToCEL(&buf)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if decodedcel.MRType() != tc {
+				t.Errorf("decoded CEL MR type: got %v, want %v", decodedcel.MRType(), tc)
+			}
+			if len(decodedcel.Records()) != 1 {
+				t.Errorf("should have one record")
+			}
+			if decodedcel.Records()[0].RecNum != 0 {
+				t.Errorf("recnum mismatch")
+			}
+			if decodedcel.Records()[0].IndexType != tc {
+				t.Errorf("index type mismatch")
+			}
+			if decodedcel.Records()[0].Index != uint8(16) {
+				t.Errorf("pcr value mismatch")
+			}
+
+			if !reflect.DeepEqual(decodedcel.Records(), cel.Records()) {
+				t.Errorf("decoded CEL doesn't equal to the original one")
+			}
+		})
+	}
+}
+
 func TestCELAppendDifferentMRTypes(t *testing.T) {
 	rot, err := register.CreateFakeRot(measuredHashes, 24)
 	if err != nil {

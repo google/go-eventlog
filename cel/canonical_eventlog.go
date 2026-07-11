@@ -391,7 +391,7 @@ func DecodeToCEL(buf *bytes.Buffer) (CEL, error) {
 		}
 		cel.Recs = append(cel.Recs, celr)
 	}
-	if len(cel.Recs) > 1 {
+	if len(cel.Recs) > 0 {
 		zeroMRType := MRType(cel.Recs[0].IndexType)
 		for _, rec := range cel.Recs {
 			mrType := MRType(rec.IndexType)
