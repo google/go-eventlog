@@ -84,6 +84,7 @@ const (
 	NonhostConfig        EventType = 0x00000010
 	NonhostInfo          EventType = 0x00000011
 	OmitBootDeviceEvents EventType = 0x00000012
+	PostCode2            EventType = 0x00000013
 )
 
 // EFI Events (TCG EFI Platform Specification Version 1.22)
@@ -101,8 +102,13 @@ const (
 	EFIPlatformFirmwareBlob2   EventType = 0x8000000A
 	EFIHandoffTables2          EventType = 0x8000000B
 	EFIVariableBoot2           EventType = 0x8000000C
+	EFIGPTEvent2               EventType = 0x8000000D
 	EFIHCRTMEvent              EventType = 0x80000010
 	EFIVariableAuthority       EventType = 0x800000E0
+	EFISPDMFirmwareBlob        EventType = 0x800000E1
+	EFISPDMFirmwareConfig      EventType = 0x800000E2
+	EFISPDMDevicePolicy        EventType = 0x800000E3
+	EFISPDMDeviceAuthority     EventType = 0x800000E4
 )
 
 // GoogleDRTMEvent is a custom DRTM event type for Google measurements.
@@ -129,6 +135,7 @@ var EventTypeNames = map[EventType]string{
 	NonhostConfig:        "Non-HostConfig",
 	NonhostInfo:          "Non-Host Info",
 	OmitBootDeviceEvents: "Omit Boot Device Events",
+	PostCode2:            "POST Code 2",
 
 	EFIEventBase:               "EFI Event Base",
 	EFIVariableDriverConfig:    "EFI Variable Driver Config",
@@ -143,8 +150,13 @@ var EventTypeNames = map[EventType]string{
 	EFIPlatformFirmwareBlob2:   "EFI Platform Firmware Blob 2",
 	EFIHandoffTables2:          "EFI Handoff Tables 2",
 	EFIVariableBoot2:           "EFI Variable Boot2",
+	EFIGPTEvent2:               "EFI GPT Event 2",
 	EFIHCRTMEvent:              "EFI H-CRTM Event",
 	EFIVariableAuthority:       "EFI Variable Authority",
+	EFISPDMFirmwareBlob:        "EFI SPDM Firmware Blob",
+	EFISPDMFirmwareConfig:      "EFI SPDM Firmware Config",
+	EFISPDMDevicePolicy:        "EFI SPDM Device Policy",
+	EFISPDMDeviceAuthority:     "EFI SPDM Device Authority",
 
 	// Custom event type, not in TCG spec.
 	GoogleDRTMEvent: "Google DRTM Event",
@@ -170,6 +182,7 @@ var eventTypeStrings = map[uint32]string{
 	0x00000010: "EV_NONHOST_CONFIG",
 	0x00000011: "EV_NONHOST_INFO",
 	0x00000012: "EV_OMIT_BOOT_DEVICE_EVENTS",
+	0x00000013: "EV_POST_CODE2",
 	0x80000000: "EV_EFI_EVENT_BASE",
 	0x80000001: "EV_EFI_VARIABLE_DRIVER_CONFIG",
 	0x80000002: "EV_EFI_VARIABLE_BOOT",
@@ -183,8 +196,13 @@ var eventTypeStrings = map[uint32]string{
 	0x8000000A: "EV_EFI_PLATFORM_FIRMWARE_BLOB2",
 	0x8000000B: "EV_EFI_HANDOFF_TABLES2",
 	0x8000000C: "EV_EFI_VARIABLE_BOOT2",
+	0x8000000D: "EV_EFI_GPT_EVENT2",
 	0x80000010: "EV_EFI_HCRTM_EVENT",
 	0x800000E0: "EV_EFI_VARIABLE_AUTHORITY",
+	0x800000E1: "EV_EFI_SPDM_FIRMWARE_BLOB",
+	0x800000E2: "EV_EFI_SPDM_FIRMWARE_CONFIG",
+	0x800000E3: "EV_EFI_SPDM_DEVICE_POLICY",
+	0x800000E4: "EV_EFI_SPDM_DEVICE_AUTHORITY",
 
 	// Custom event type, not in TCG spec.
 	0x10000000: "EV_GOOGLE_DRTM_EVENT",
