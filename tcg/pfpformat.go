@@ -84,13 +84,11 @@ func (e Event) MRIndex() uint32 {
 	return uint32(e.Index)
 }
 
-// UntrustedType gives the unmeasured event type.
+// UntrustedType gives the unmeasured event type. The value comes from the log,
+// so it can be a type this library does not know. Use UntrustedParseEventType
+// when a recognized type is required.
 func (e Event) UntrustedType() EventType {
-	tcgEvent := EventType(e.Type)
-	if _, ok := tcgEvent.KnownName(); !ok {
-		panic("library cannot convert between tpmeventlog EventType and tcg EventType for event " + e.Type.String())
-	}
-	return tcgEvent
+	return e.Type
 }
 
 // RawData gives the event data.

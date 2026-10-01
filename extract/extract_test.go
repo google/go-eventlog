@@ -930,3 +930,60 @@ func getEventsFromLog(t *testing.T, events []tcg.Event) []tcg.Event {
 	}
 	return replayedEvents
 }
+
+// unrecognizedType is a UEFI range event type that no spec assigns.
+const unrecognizedType tcg.EventType = 0x800000FF
+
+// FirmwareLogState reads state from PCR0, 2, 4, 5, 7, 8 and 9, so an event in
+// PCR14 only comes back in RawEvents.
+func TestFirmwareLogStateReportsUnrecognizedEventType(t *testing.T) {
+	hash, events := getTPMELEvents(t)
+	unrecognized := newEvent(t, 14, unrecognizedType, []byte("event data"))
+
+	fs, err := FirmwareLogState(append(events, unrecognized), hash, TPMRegisterConfig, Opts{Loader: GRUB})
+	if err != nil {
+		t.Fatalf("FirmwareLogState() error = %v", err)
+	}
+
+	raw := fs.GetRawEvents()
+	if len(raw) != len(events)+1 {
+		t.Fatalf("FirmwareLogState() returned %d raw events, want %d", len(raw), len(events)+1)
+	}
+	got := raw[len(raw)-1]
+	if got.GetUntrustedType() != uint32(unrecognizedType) {
+		t.Errorf("raw event UntrustedType = %#x, want %#x", got.GetUntrustedType(), uint32(unrecognizedType))
+	}
+	if got.GetPcrIndex() != 14 {
+		t.Errorf("raw event PcrIndex = %d, want 14", got.GetPcrIndex())
+	}
+	if !bytes.Equal(got.GetData(), unrecognized.RawData()) {
+		t.Errorf("raw event Data = %q, want %q", got.GetData(), unrecognized.RawData())
+	}
+	if !bytes.Equal(got.GetDigest(), unrecognized.ReplayedDigest()) {
+		t.Errorf("raw event Digest = %x, want %x", got.GetDigest(), unrecognized.ReplayedDigest())
+	}
+}
+
+// SecureBootState acts on the event type, so it has to reject a type it does not
+// know.
+func TestSecureBootStateRejectsUnrecognizedEventType(t *testing.T) {
+	_, events := getTPMELEvents(t)
+	unrecognized := newEvent(t, TPMRegisterConfig.SecureBootIdx, unrecognizedType, []byte("event data"))
+
+	if _, err := SecureBootState(append(events, unrecognized), TPMRegisterConfig, Opts{}); err == nil ||
+		!strings.Contains(err.Error(), "unrecognised event type") {
+		t.Errorf("SecureBootState() error = %v, want it to report an unrecognised event type", err)
+	}
+}
+
+// GrubStateFromTPMLog compares the event type against the one type it expects
+// rather than going through tcg.UntrustedParseEventType, so cover that too.
+func TestGrubStateFromTPMLogRejectsUnrecognizedEventType(t *testing.T) {
+	hash, events := getTPMELEvents(t)
+	unrecognized := newEvent(t, TPMRegisterConfig.GRUBCmdIdx, unrecognizedType, []byte("event data"))
+
+	if _, err := GrubStateFromTPMLog(hash, append(events, unrecognized)); err == nil ||
+		!strings.Contains(err.Error(), "expected EV_IPL") {
+		t.Errorf("GrubStateFromTPMLog() error = %v, want it to reject the event type", err)
+	}
+}
