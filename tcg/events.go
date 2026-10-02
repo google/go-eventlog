@@ -31,6 +31,12 @@ const (
 	// maxDataLen is the maximum size in bytes of a variable data field.
 	// This value should be larger than any reasonable value.
 	maxDataLen = 1024 * 1024 // 1 Megabyte.
+	// efiSignatureListHeaderSize is the encoded size of EFI_SIGNATURE_LIST
+	// up to and including SignatureSize.
+	efiSignatureListHeaderSize = 28
+	// efiSignatureOwnerSize is the size of the SignatureOwner GUID that
+	// prefixes every EFI_SIGNATURE_DATA entry.
+	efiSignatureOwnerSize = 16
 )
 
 // GUIDs representing the contents of an UEFI_SIGNATURE_LIST.
@@ -463,7 +469,7 @@ type efiSignatureList struct {
 // The structure and related GUIDs are defined at:
 // https://uefi.org/sites/default/files/resources/UEFI_Spec_2_8_final.pdf#page=1790
 func parseEfiSignatureList(b []byte) ([]x509.Certificate, [][]byte, error) {
-	if len(b) < 28 {
+	if len(b) < efiSignatureListHeaderSize {
 		// Being passed an empty signature list here appears to be valid
 		return nil, nil, nil
 	}
@@ -484,13 +490,27 @@ func parseEfiSignatureList(b []byte) ([]x509.Certificate, [][]byte, error) {
 		if signatures.Header.SignatureListSize > maxDataLen {
 			return nil, nil, fmt.Errorf("signature list too large: %d > %d", signatures.Header.SignatureListSize, maxDataLen)
 		}
+		if signatures.Header.SignatureListSize < efiSignatureListHeaderSize {
+			return nil, nil, fmt.Errorf("signature list too small: %d < %d", signatures.Header.SignatureListSize, efiSignatureListHeaderSize)
+		}
+		payloadSize := signatures.Header.SignatureListSize - efiSignatureListHeaderSize
+		if signatures.Header.SignatureHeaderSize > payloadSize {
+			return nil, nil, fmt.Errorf("signature header size %d exceeds remaining list size %d", signatures.Header.SignatureHeaderSize, payloadSize)
+		}
+		payloadSize -= signatures.Header.SignatureHeaderSize
+		if signatures.Header.SignatureSize < efiSignatureOwnerSize {
+			return nil, nil, fmt.Errorf("signature size too small: %d < %d", signatures.Header.SignatureSize, efiSignatureOwnerSize)
+		}
+		if signatures.Header.SignatureSize > payloadSize {
+			return nil, nil, fmt.Errorf("signature size %d exceeds remaining list size %d", signatures.Header.SignatureSize, payloadSize)
+		}
 
 		signatureType := signatures.Header.SignatureType
 		switch signatureType {
 		case certX509SigGUID: // X509 certificate
-			for sigOffset := 0; uint32(sigOffset) < signatures.Header.SignatureListSize-28; {
+			for sigOffset := 0; uint32(sigOffset) < signatures.Header.SignatureListSize-efiSignatureListHeaderSize; {
 				signature := efiSignatureData{}
-				signature.SignatureData = make([]byte, signatures.Header.SignatureSize-16)
+				signature.SignatureData = make([]byte, signatures.Header.SignatureSize-efiSignatureOwnerSize)
 				err := binary.Read(buf, binary.LittleEndian, &signature.SignatureOwner)
 				if err != nil {
 					return nil, nil, err
@@ -507,9 +527,9 @@ func parseEfiSignatureList(b []byte) ([]x509.Certificate, [][]byte, error) {
 				certificates = append(certificates, *cert)
 			}
 		case hashSHA256SigGUID: // SHA256
-			for sigOffset := 0; uint32(sigOffset) < signatures.Header.SignatureListSize-28; {
+			for sigOffset := 0; uint32(sigOffset) < signatures.Header.SignatureListSize-efiSignatureListHeaderSize; {
 				signature := efiSignatureData{}
-				signature.SignatureData = make([]byte, signatures.Header.SignatureSize-16)
+				signature.SignatureData = make([]byte, signatures.Header.SignatureSize-efiSignatureOwnerSize)
 				err := binary.Read(buf, binary.LittleEndian, &signature.SignatureOwner)
 				if err != nil {
 					return nil, nil, err
