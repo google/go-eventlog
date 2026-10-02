@@ -437,13 +437,6 @@ func unicodeNameEquals(v UEFIVariableData, comp []uint16) bool {
 	return true
 }
 
-// efiSignatureData represents the EFI_SIGNATURE_DATA type.
-// See section "31.4.1 Signature Database" in the specification for more information.
-type efiSignatureData struct {
-	SignatureOwner efiGUID
-	SignatureData  []byte // []int8
-}
-
 // efiSignatureList represents the EFI_SIGNATURE_LIST type.
 // See section "31.4.1 Signature Database" in the specification for more information.
 type efiSignatureListHeader struct {
@@ -453,102 +446,138 @@ type efiSignatureListHeader struct {
 	SignatureSize       uint32
 }
 
-type efiSignatureList struct {
-	Header        efiSignatureListHeader
-	SignatureData []byte
-	Signatures    []byte
-}
+const (
+	// efiSignatureListHeaderSize is sizeof(EFI_SIGNATURE_LIST) (GUID + 3 uint32s).
+	efiSignatureListHeaderSize = 28
+	// efiSignatureOwnerSize is sizeof(EFI_GUID) preceding SignatureData in EFI_SIGNATURE_DATA.
+	efiSignatureOwnerSize = 16
+	// efiSHA256SignatureSize is sizeof(EFI_SIGNATURE_DATA) for SHA-256 (GUID + 32-byte hash).
+	efiSHA256SignatureSize = efiSignatureOwnerSize + 32
+)
 
 // parseEfiSignatureList parses a EFI_SIGNATURE_LIST structure.
 // The structure and related GUIDs are defined at:
 // https://uefi.org/sites/default/files/resources/UEFI_Spec_2_8_final.pdf#page=1790
 func parseEfiSignatureList(b []byte) ([]x509.Certificate, [][]byte, error) {
-	if len(b) < 28 {
+	if len(b) < efiSignatureListHeaderSize {
 		// Being passed an empty signature list here appears to be valid
 		return nil, nil, nil
 	}
-	signatures := efiSignatureList{}
 	buf := bytes.NewReader(b)
-	certificates := []x509.Certificate{}
-	hashes := [][]byte{}
+	var (
+		certificates []x509.Certificate
+		hashes       [][]byte
+	)
 
 	for buf.Len() > 0 {
-		err := binary.Read(buf, binary.LittleEndian, &signatures.Header)
-		if err != nil {
-			return nil, nil, err
+		var hdr efiSignatureListHeader
+		if err := binary.Read(buf, binary.LittleEndian, &hdr); err != nil {
+			return nil, nil, fmt.Errorf("reading signature list header: %w", err)
 		}
 
-		if signatures.Header.SignatureHeaderSize > maxDataLen {
-			return nil, nil, fmt.Errorf("signature header too large: %d > %d", signatures.Header.SignatureHeaderSize, maxDataLen)
+		if hdr.SignatureHeaderSize > maxDataLen {
+			return nil, nil, fmt.Errorf("signature header too large: %d > %d", hdr.SignatureHeaderSize, maxDataLen)
 		}
-		if signatures.Header.SignatureListSize > maxDataLen {
-			return nil, nil, fmt.Errorf("signature list too large: %d > %d", signatures.Header.SignatureListSize, maxDataLen)
+		if hdr.SignatureListSize > maxDataLen {
+			return nil, nil, fmt.Errorf("signature list too large: %d > %d", hdr.SignatureListSize, maxDataLen)
 		}
 
-		signatureType := signatures.Header.SignatureType
-		switch signatureType {
+		minListSize := efiSignatureListHeaderSize + hdr.SignatureHeaderSize
+		if hdr.SignatureListSize < minListSize {
+			return nil, nil, fmt.Errorf("signature list too small: %d < %d", hdr.SignatureListSize, minListSize)
+		}
+		remainingListBytes := hdr.SignatureListSize - efiSignatureListHeaderSize
+		if int(remainingListBytes) > buf.Len() {
+			return nil, nil, fmt.Errorf("signature list payload %d exceeds remaining buffer %d", remainingListBytes, buf.Len())
+		}
+
+		if hdr.SignatureHeaderSize > 0 {
+			if _, err := buf.Seek(int64(hdr.SignatureHeaderSize), io.SeekCurrent); err != nil {
+				return nil, nil, fmt.Errorf("skipping signature header: %w", err)
+			}
+		}
+
+		dataSize := hdr.SignatureListSize - minListSize
+		if dataSize > 0 {
+			if hdr.SignatureSize < efiSignatureOwnerSize {
+				return nil, nil, fmt.Errorf("signature size too small: %d < %d", hdr.SignatureSize, efiSignatureOwnerSize)
+			}
+			if hdr.SignatureSize > dataSize {
+				return nil, nil, fmt.Errorf("signature size too large: %d > %d", hdr.SignatureSize, dataSize)
+			}
+			if dataSize%hdr.SignatureSize != 0 {
+				return nil, nil, fmt.Errorf("signature data size %d is not a multiple of signature size %d", dataSize, hdr.SignatureSize)
+			}
+		}
+
+		numEntries := uint32(0)
+		if hdr.SignatureSize > 0 {
+			numEntries = dataSize / hdr.SignatureSize
+		}
+
+		switch hdr.SignatureType {
 		case certX509SigGUID: // X509 certificate
-			for sigOffset := 0; uint32(sigOffset) < signatures.Header.SignatureListSize-28; {
-				signature := efiSignatureData{}
-				signature.SignatureData = make([]byte, signatures.Header.SignatureSize-16)
-				err := binary.Read(buf, binary.LittleEndian, &signature.SignatureOwner)
+			for i := uint32(0); i < numEntries; i++ {
+				sigData, err := readSignatureData(buf, hdr.SignatureSize)
 				if err != nil {
 					return nil, nil, err
 				}
-				err = binary.Read(buf, binary.LittleEndian, &signature.SignatureData)
+				cert, err := x509.ParseCertificate(sigData)
 				if err != nil {
-					return nil, nil, err
+					return nil, nil, fmt.Errorf("parsing x509 certificate: %w", err)
 				}
-				cert, err := x509.ParseCertificate(signature.SignatureData)
-				if err != nil {
-					return nil, nil, err
-				}
-				sigOffset += int(signatures.Header.SignatureSize)
 				certificates = append(certificates, *cert)
 			}
 		case hashSHA256SigGUID: // SHA256
-			for sigOffset := 0; uint32(sigOffset) < signatures.Header.SignatureListSize-28; {
-				signature := efiSignatureData{}
-				signature.SignatureData = make([]byte, signatures.Header.SignatureSize-16)
-				err := binary.Read(buf, binary.LittleEndian, &signature.SignatureOwner)
+			if dataSize > 0 && hdr.SignatureSize != efiSHA256SignatureSize {
+				return nil, nil, fmt.Errorf("signature size %d does not match SHA-256 entry size %d", hdr.SignatureSize, efiSHA256SignatureSize)
+			}
+			for i := uint32(0); i < numEntries; i++ {
+				sigData, err := readSignatureData(buf, hdr.SignatureSize)
 				if err != nil {
 					return nil, nil, err
 				}
-				err = binary.Read(buf, binary.LittleEndian, &signature.SignatureData)
-				if err != nil {
-					return nil, nil, err
-				}
-				hashes = append(hashes, signature.SignatureData)
-				sigOffset += int(signatures.Header.SignatureSize)
+				hashes = append(hashes, sigData)
 			}
 		case keyRSA2048SigGUID:
-			err = errors.New("unhandled RSA2048 key")
+			return nil, nil, errors.New("unhandled RSA2048 key")
 		case certRSA2048SHA256SigGUID:
-			err = errors.New("unhandled RSA2048-SHA256 key")
+			return nil, nil, errors.New("unhandled RSA2048-SHA256 key")
 		case hashSHA1SigGUID:
-			err = errors.New("unhandled SHA1 hash")
+			return nil, nil, errors.New("unhandled SHA1 hash")
 		case certRSA2048SHA1SigGUID:
-			err = errors.New("unhandled RSA2048-SHA1 key")
+			return nil, nil, errors.New("unhandled RSA2048-SHA1 key")
 		case hashSHA224SigGUID:
-			err = errors.New("unhandled SHA224 hash")
+			return nil, nil, errors.New("unhandled SHA224 hash")
 		case hashSHA384SigGUID:
-			err = errors.New("unhandled SHA384 hash")
+			return nil, nil, errors.New("unhandled SHA384 hash")
 		case hashSHA512SigGUID:
-			err = errors.New("unhandled SHA512 hash")
+			return nil, nil, errors.New("unhandled SHA512 hash")
 		case certHashSHA256SigGUID:
-			err = errors.New("unhandled X509-SHA256 hash metadata")
+			return nil, nil, errors.New("unhandled X509-SHA256 hash metadata")
 		case certHashSHA384SigGUID:
-			err = errors.New("unhandled X509-SHA384 hash metadata")
+			return nil, nil, errors.New("unhandled X509-SHA384 hash metadata")
 		case certHashSHA512SigGUID:
-			err = errors.New("unhandled X509-SHA512 hash metadata")
+			return nil, nil, errors.New("unhandled X509-SHA512 hash metadata")
 		default:
-			err = fmt.Errorf("unhandled signature type %s", signatureType)
-		}
-		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("unhandled signature type %s", hdr.SignatureType)
 		}
 	}
 	return certificates, hashes, nil
+}
+
+func readSignatureData(r io.ReadSeeker, sigSize uint32) ([]byte, error) {
+	if sigSize < efiSignatureOwnerSize {
+		return nil, fmt.Errorf("signature size too small: %d < %d", sigSize, efiSignatureOwnerSize)
+	}
+	if _, err := r.Seek(efiSignatureOwnerSize, io.SeekCurrent); err != nil {
+		return nil, fmt.Errorf("skipping signature owner: %w", err)
+	}
+	sigData := make([]byte, sigSize-efiSignatureOwnerSize)
+	if _, err := io.ReadFull(r, sigData); err != nil {
+		return nil, fmt.Errorf("reading signature data: %w", err)
+	}
+	return sigData, nil
 }
 
 // EFISignatureData represents the EFI_SIGNATURE_DATA type.
