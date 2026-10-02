@@ -27,6 +27,7 @@ import (
 	"github.com/google/go-eventlog/internal/testutil"
 	pb "github.com/google/go-eventlog/proto/state"
 	"github.com/google/go-eventlog/register"
+	"github.com/google/go-eventlog/tcg"
 	"github.com/google/go-eventlog/testdata"
 	"github.com/google/go-eventlog/wellknown"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -908,4 +909,109 @@ func decodeHex(hexStr string) []byte {
 		panic(err)
 	}
 	return bytes
+}
+
+func FuzzReplayAndExtract(f *testing.F) {
+	seedPCRBytes := make([]byte, 24*crypto.SHA256.Size())
+	f.Add(testdata.Ubuntu2404AmdSevSnpEventLog, seedPCRBytes)
+	f.Add(testdata.Cos101AmdSevEventLog, seedPCRBytes)
+	f.Add(testdata.Debian10EventLog, seedPCRBytes)
+	f.Add(testdata.Rhel8EventLog, seedPCRBytes)
+	f.Add(testdata.Cos85AmdSevEventLog, seedPCRBytes)
+	f.Add(testdata.Cos93AmdSevEventLog, seedPCRBytes)
+	f.Add(testdata.Cos121AmdSevEventLog, seedPCRBytes)
+	f.Add(testdata.ArchLinuxWorkstationEventLog, seedPCRBytes)
+	f.Add(testdata.GlinuxAlexEventLog, seedPCRBytes)
+	f.Add(testdata.GdcHost, seedPCRBytes)
+	f.Add(testdata.HostGMESEventLog, seedPCRBytes)
+	f.Add([]byte{}, []byte{})
+
+	f.Fuzz(func(_ *testing.T, rawLog []byte, pcrBytes []byte) {
+		// Call 1: Construct PCRBank from pcrBytes.
+		pcrs := make([]register.PCR, 24)
+		for i := 0; i < 24; i++ {
+			d := make([]byte, crypto.SHA256.Size())
+			start := i * crypto.SHA256.Size()
+			if start < len(pcrBytes) {
+				end := start + crypto.SHA256.Size()
+				if end > len(pcrBytes) {
+					end = len(pcrBytes)
+				}
+				copy(d, pcrBytes[start:end])
+			}
+			pcrs[i] = register.PCR{
+				Index:     i,
+				Digest:    d,
+				DigestAlg: crypto.SHA256,
+			}
+		}
+		bank := register.PCRBank{
+			TCGHashAlgo: pb.HashAlgo_SHA256,
+			PCRs:        pcrs,
+		}
+		_, _ = ReplayAndExtract(rawLog, bank, extract.Opts{})
+
+		// Call 2: Pre-compute PCR digests from parsed log so replay succeeds and extractors execute.
+		el, err := tcg.ParseEventLog(rawLog, tcg.ParseOpts{})
+		if err != nil {
+			return
+		}
+		for _, alg := range el.Algs {
+			var pbAlg pb.HashAlgo
+			switch alg {
+			case register.HashSHA1:
+				pbAlg = pb.HashAlgo_SHA1
+			case register.HashSHA256:
+				pbAlg = pb.HashAlgo_SHA256
+			case register.HashSHA384:
+				pbAlg = pb.HashAlgo_SHA384
+			default:
+				continue
+			}
+			ch := alg.CryptoHash()
+			pcrDigests := make(map[int][]byte)
+			var locality byte
+			for _, e := range el.Events(alg) {
+				if e.UntrustedType() == tcg.NoAction {
+					if e.MRIndex() == 0 && len(e.RawData()) == 17 && strings.HasPrefix(string(e.RawData()), "StartupLocality") {
+						locality = e.RawData()[len(e.RawData())-1]
+					}
+					continue
+				}
+				idx := int(e.MRIndex())
+				cur, ok := pcrDigests[idx]
+				if !ok {
+					cur = make([]byte, ch.Size())
+					if idx == 0 {
+						cur[len(cur)-1] = locality
+					}
+				}
+				h := ch.New()
+				h.Write(cur)
+				h.Write(e.ReplayedDigest())
+				pcrDigests[idx] = h.Sum(nil)
+			}
+			for i := 0; i < 24; i++ {
+				if _, ok := pcrDigests[i]; !ok {
+					pcrDigests[i] = make([]byte, ch.Size())
+				}
+			}
+			matchingPCRs := make([]register.PCR, 0, len(pcrDigests))
+			for idx, d := range pcrDigests {
+				matchingPCRs = append(matchingPCRs, register.PCR{
+					Index:     idx,
+					Digest:    d,
+					DigestAlg: ch,
+				})
+			}
+			matchingBank := register.PCRBank{
+				TCGHashAlgo: pbAlg,
+				PCRs:        matchingPCRs,
+			}
+			_, _ = ReplayAndExtract(rawLog, matchingBank, extract.Opts{})
+			_, _ = ReplayAndExtract(rawLog, matchingBank, extract.Opts{
+				Loader: extract.GRUB,
+			})
+		}
+	})
 }
