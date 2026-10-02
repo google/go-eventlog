@@ -484,6 +484,18 @@ func parseEfiSignatureList(b []byte) ([]x509.Certificate, [][]byte, error) {
 		if signatures.Header.SignatureListSize > maxDataLen {
 			return nil, nil, fmt.Errorf("signature list too large: %d > %d", signatures.Header.SignatureListSize, maxDataLen)
 		}
+		if signatures.Header.SignatureListSize < 28 {
+			return nil, nil, fmt.Errorf("signature list too small: %d < 28", signatures.Header.SignatureListSize)
+		}
+		if int(signatures.Header.SignatureListSize-28) > buf.Len() {
+			return nil, nil, fmt.Errorf("signature list payload %d exceeds remaining buffer %d", signatures.Header.SignatureListSize-28, buf.Len())
+		}
+		if signatures.Header.SignatureSize < 16 {
+			return nil, nil, fmt.Errorf("signature size too small: %d < 16", signatures.Header.SignatureSize)
+		}
+		if signatures.Header.SignatureSize > signatures.Header.SignatureListSize {
+			return nil, nil, fmt.Errorf("signature size %d exceeds signature list size %d", signatures.Header.SignatureSize, signatures.Header.SignatureListSize)
+		}
 
 		signatureType := signatures.Header.SignatureType
 		switch signatureType {
