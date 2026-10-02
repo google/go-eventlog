@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-eventlog/register"
 )
 
@@ -356,4 +357,110 @@ func fakeRotExtender(rot register.FakeROT) MRExtender {
 			DigestAlg: bank,
 		})
 	}
+}
+
+func FuzzDecodeToCEL(f *testing.F) {
+	rot, err := register.CreateFakeRot(measuredHashes, 24)
+	if err != nil {
+		f.Fatal(err)
+	}
+
+	for _, mrType := range []MRType{CCMRType, PCRType} {
+		el := eventLog{
+			Type: mrType,
+		}
+		fakeEvent1 := FakeTlv{
+			EventType:    FakeEvent1,
+			EventContent: []byte("docker.io/bazel/experimental/test:latest"),
+		}
+		if err := el.AppendEvent(fakeEvent1, measuredHashes, 16, fakeRotExtender(rot)); err != nil {
+			f.Fatal(err)
+		}
+		fakeEvent2 := FakeTlv{
+			EventType:    FakeEvent2,
+			EventContent: []byte("sha256:781d8dfdd92118436bd914442c8339e653b83f6bf3c1a7a98efcfb7c4fed7483"),
+		}
+		if err := el.AppendEvent(fakeEvent2, measuredHashes, 23, fakeRotExtender(rot)); err != nil {
+			f.Fatal(err)
+		}
+
+		var buf bytes.Buffer
+		if err := el.EncodeCEL(&buf); err != nil {
+			f.Fatal(err)
+		}
+		valid := buf.Bytes()
+		f.Add(valid)
+		if len(valid) > 10 {
+			f.Add(valid[:len(valid)/2])
+			corrupted := append([]byte(nil), valid...)
+			corrupted[0] ^= 0xff
+			f.Add(corrupted)
+		}
+	}
+	f.Add([]byte{})
+	f.Add([]byte{0x00, 0x00, 0x00, 0x01})
+	f.Add([]byte{0x00, 0xff, 0xff, 0xff, 0xff})
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		c, err := DecodeToCEL(bytes.NewBuffer(data))
+		if err != nil {
+			return
+		}
+		_ = c.Records()
+		_ = c.MRType()
+		var buf bytes.Buffer
+		if err := c.EncodeCEL(&buf); err == nil {
+			roundtrip, err := DecodeToCEL(&buf)
+			if err != nil {
+				t.Fatalf("failed to decode re-encoded CEL: %v", err)
+			}
+			if roundtrip.MRType() != c.MRType() {
+				t.Fatalf("roundtrip MRType mismatch: got %v, want %v", roundtrip.MRType(), c.MRType())
+			}
+		}
+	})
+}
+
+func FuzzTLVUnmarshalBinary(f *testing.F) {
+	tlv1 := TLV{
+		Type:  1,
+		Value: []byte("test-tlv-value"),
+	}
+	data1, err := tlv1.MarshalBinary()
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Add(data1)
+
+	tlv2 := TLV{
+		Type:  0,
+		Value: make([]byte, 8),
+	}
+	data2, err := tlv2.MarshalBinary()
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Add(data2)
+
+	f.Add([]byte{})
+	f.Add([]byte{0x7f, 0x00, 0x00, 0x00})
+	f.Add([]byte{0x7f, 0x00, 0x00, 0x00, 0x05, 0x01})
+	f.Add([]byte{0x01, 0xff, 0xff, 0xff, 0xff})
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		var tlv TLV
+		if err := (&tlv).UnmarshalBinary(data); err == nil {
+			marshaled, err := tlv.MarshalBinary()
+			if err != nil {
+				t.Fatalf("MarshalBinary failed after UnmarshalBinary: %v", err)
+			}
+			var roundtrip TLV
+			if err := (&roundtrip).UnmarshalBinary(marshaled); err != nil {
+				t.Fatalf("UnmarshalBinary failed on marshaled output: %v", err)
+			}
+			if diff := cmp.Diff(tlv, roundtrip); diff != "" {
+				t.Fatalf("roundtrip mismatch (-want +got):\n%s", diff)
+			}
+		}
+	})
 }
