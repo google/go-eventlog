@@ -484,12 +484,18 @@ func parseEfiSignatureList(b []byte) ([]x509.Certificate, [][]byte, error) {
 		if signatures.Header.SignatureListSize > maxDataLen {
 			return nil, nil, fmt.Errorf("signature list too large: %d > %d", signatures.Header.SignatureListSize, maxDataLen)
 		}
+		// An EFI_SIGNATURE_LIST header is 28 bytes: a 16-byte SignatureType GUID
+		// followed by 3 uint32 size fields. See:
+		// https://uefi.org/specs/UEFI/2.9_A/32_Secure_Boot_and_Driver_Signing.html#efi-signature-list
 		if signatures.Header.SignatureListSize < 28 {
 			return nil, nil, fmt.Errorf("signature list too small: %d < 28", signatures.Header.SignatureListSize)
 		}
 		if int(signatures.Header.SignatureListSize-28) > buf.Len() {
 			return nil, nil, fmt.Errorf("signature list payload %d exceeds remaining buffer %d", signatures.Header.SignatureListSize-28, buf.Len())
 		}
+		// Each EFI_SIGNATURE_DATA element begins with a 16-byte SignatureOwner GUID.
+		// SignatureSize must be at least 16 to prevent underflowing SignatureSize-16. See:
+		// https://uefi.org/specs/UEFI/2.9_A/32_Secure_Boot_and_Driver_Signing.html#efi-signature-data
 		if signatures.Header.SignatureSize < 16 {
 			return nil, nil, fmt.Errorf("signature size too small: %d < 16", signatures.Header.SignatureSize)
 		}
