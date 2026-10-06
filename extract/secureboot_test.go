@@ -26,6 +26,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"os"
 	"strings"
@@ -424,7 +425,7 @@ func TestParseSecurebootState_RejectsInvalidDigest(t *testing.T) {
 			if err == nil {
 				t.Fatalf("ParseSecurebootState() succeeded, want error for invalid digest")
 			}
-			const wantErr = "invalid digest on event 0"
+			wantErr := fmt.Sprintf("invalid digest on %v event 0", tc.event.Type)
 			if !strings.Contains(err.Error(), wantErr) {
 				t.Errorf("ParseSecurebootState() error = %q, want substring %q", err.Error(), wantErr)
 			}
@@ -491,7 +492,23 @@ func buildShimAuthorityBuffer(t *testing.T, varName string, varData []byte) []by
 
 func TestParseSecurebootState_AcceptsShimTrailingByteWorkaround(t *testing.T) {
 	// Construct a minimal UEFI variable authority event with an erroneous trailing byte (rhboot/shim bug 157).
-	validBytes := buildShimAuthorityBuffer(t, "SbatLevel", nil)
+	// The workaround only applies when the payload also triggers ErrSigMissingGUID (i.e. older shim cert).
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("ecdsa.GenerateKey failed: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: "Shim Authority Cert",
+		},
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &priv.PublicKey, priv)
+	if err != nil {
+		t.Fatalf("x509.CreateCertificate failed: %v", err)
+	}
+
+	validBytes := buildShimAuthorityBuffer(t, "Shim", certDER)
 
 	// Calculate SHA-256 over valid payload, then append trailing byte to simulate shim bug.
 	digest := sha256.Sum256(validBytes)
@@ -507,6 +524,26 @@ func TestParseSecurebootState_AcceptsShimTrailingByteWorkaround(t *testing.T) {
 	}
 	if _, err := extract.ParseSecurebootState(events, extract.TPMRegisterConfig, extract.Opts{}); err != nil {
 		t.Fatalf("ParseSecurebootState() failed for shim trailing-byte event: %v", err)
+	}
+}
+
+func TestParseSecurebootState_RejectsTrailingByteWithoutMissingGUID(t *testing.T) {
+	// A variable like "SbatLevel" returns nil error (no ErrSigMissingGUID), so the single-byte
+	// workaround must not apply if its digest does not match.
+	validBytes := buildShimAuthorityBuffer(t, "SbatLevel", nil)
+	digest := sha256.Sum256(validBytes)
+	malformedBytes := append(validBytes, 0x00)
+
+	events := []tcg.Event{
+		{
+			Index:  7,
+			Type:   tcg.EFIVariableAuthority,
+			Data:   malformedBytes,
+			Digest: digest[:],
+		},
+	}
+	if _, err := extract.ParseSecurebootState(events, extract.TPMRegisterConfig, extract.Opts{}); err == nil {
+		t.Fatal("ParseSecurebootState() succeeded for trailing byte on non-shim event, want digest error")
 	}
 }
 

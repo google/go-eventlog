@@ -193,14 +193,33 @@ func ParseSecurebootState(events []tcg.Event, registerCfg registerConfig, opts O
 				}
 
 			case tcg.EFIVariableAuthority:
+				digestErr := DigestEquals(e, e.RawData())
+
 				v, err := tcg.ParseUEFIVariableData(bytes.NewReader(e.RawData()))
 				if err != nil {
+					if digestErr != nil {
+						return nil, fmt.Errorf("invalid digest on %v event %d: %w", et, e.Num(), digestErr)
+					}
 					return nil, fmt.Errorf("failed parsing UEFI variable data: %v", err)
 				}
 
 				a, err := tcg.ParseUEFIVariableAuthority(v)
-				if err != nil && !errors.Is(err, tcg.ErrSigMissingGUID) {
-					return nil, fmt.Errorf("failed parsing EFI variable authority at event %d: %w", e.Num(), err)
+				if err != nil {
+					// Workaround for: https://github.com/google/go-attestation/issues/157
+					if errors.Is(err, tcg.ErrSigMissingGUID) {
+						// Versions of shim which do not carry
+						// https://github.com/rhboot/shim/commit/8a27a4809a6a2b40fb6a4049071bf96d6ad71b50
+						// have an erroneous additional byte in the event, which breaks digest
+						// verification. If verification failed, we try removing the last byte.
+						if digestErr != nil && len(e.RawData()) > 0 {
+							digestErr = DigestEquals(e, e.RawData()[:len(e.RawData())-1])
+						}
+					} else {
+						return nil, fmt.Errorf("failed parsing EFI variable authority at event %d: %w", e.Num(), err)
+					}
+				}
+				if digestErr != nil {
+					return nil, fmt.Errorf("invalid digest on %v event %d: %w", et, e.Num(), digestErr)
 				}
 				seenAuthority = true
 				if !seenSeparator7 {
@@ -294,7 +313,7 @@ func requiresDigestVerification(mr uint32, et tcg.EventType, secureBootIdx uint3
 	}
 	if mr == secureBootIdx {
 		switch et {
-		case tcg.EFIAction, tcg.EFIVariableDriverConfig, tcg.EFIVariableAuthority:
+		case tcg.EFIAction, tcg.EFIVariableDriverConfig:
 			return true
 		}
 	}
@@ -305,16 +324,8 @@ func verifyEventDigest(e tcg.Event, et tcg.EventType, secureBootIdx uint32) erro
 	if !requiresDigestVerification(e.MRIndex(), et, secureBootIdx) {
 		return nil
 	}
-	err := DigestEquals(e, e.RawData())
-	if err == nil {
-		return nil
+	if err := DigestEquals(e, e.RawData()); err != nil {
+		return fmt.Errorf("invalid digest on %v event %d: %w", et, e.Num(), err)
 	}
-	// Workaround for https://github.com/google/go-attestation/issues/157:
-	// Older shim versions include an erroneous trailing byte in the event log data.
-	if et == tcg.EFIVariableAuthority && len(e.RawData()) > 0 {
-		if DigestEquals(e, e.RawData()[:len(e.RawData())-1]) == nil {
-			return nil
-		}
-	}
-	return fmt.Errorf("invalid digest on event %d: %w", e.Num(), err)
+	return nil
 }
