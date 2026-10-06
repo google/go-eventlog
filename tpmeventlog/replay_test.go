@@ -950,7 +950,10 @@ func FuzzReplayAndExtract(f *testing.F) {
 		}
 		_, _ = ReplayAndExtract(rawLog, bank, extract.Opts{})
 
-		// Call 2: Pre-compute PCR digests from parsed log so replay succeeds and extractors execute.
+		// Call 2: Pre-compute PCR digests from the parsed log so replay succeeds and extractors execute.
+		// The bank calculation mirrors tcg.replayPCR: initializing PCR0 with StartupLocality, resetting
+		// the PCR to {0...0, 0x04} on EFIHCRTMEvent, skipping NoAction records, and extending each
+		// event's digest in order so the final PCR digests match the event sequence.
 		el, err := tcg.ParseEventLog(rawLog, tcg.ParseOpts{})
 		if err != nil {
 			return
@@ -985,6 +988,10 @@ func FuzzReplayAndExtract(f *testing.F) {
 						cur[len(cur)-1] = locality
 					}
 				}
+				if e.UntrustedType() == tcg.EFIHCRTMEvent {
+					// HCRTM resets the PCR to {0, ... 0, 4} prior to extending (see tcg.replayPCR).
+					cur = append(bytes.Repeat([]byte{0x00}, ch.Size()-1), byte(0x04))
+				}
 				h := ch.New()
 				h.Write(cur)
 				h.Write(e.ReplayedDigest())
@@ -1003,6 +1010,8 @@ func FuzzReplayAndExtract(f *testing.F) {
 					DigestAlg: ch,
 				})
 			}
+			// matchingBank contains the exact end-state PCR digests computed above, ensuring
+			// that tcg.Verify passes so the fuzzer exercises the downstream extractors.
 			matchingBank := register.PCRBank{
 				TCGHashAlgo: pbAlg,
 				PCRs:        matchingPCRs,

@@ -29,3 +29,8 @@ jobs:
           go-version: stable
       - name: Run Go Fuzz (${{ matrix.target }})
         run: go test ${{ matrix.pkg }} -run=^$ -fuzz=^${{ matrix.target }}$ -fuzztime=30s
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: fuzz-crashers-${{ matrix.target }}
+          path: '**/testdata/fuzz/**'
