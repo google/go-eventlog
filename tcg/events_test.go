@@ -21,6 +21,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-eventlog/testdata"
 	"github.com/google/go-tpm/legacy/tpm2"
 )
 
@@ -154,4 +156,65 @@ func TestParseEfiSignatureListRejectsPayloadExceedingBuffer(t *testing.T) {
 	if _, _, err := parseEfiSignatureList(b); err == nil || !strings.Contains(err.Error(), "exceeds remaining buffer") {
 		t.Fatalf("parseEfiSignatureList error = %v, want error containing %q", err, "exceeds remaining buffer")
 	}
+}
+
+// uefiVariableSeeds returns the raw data of every UEFI variable event found in
+// the real-world event logs in testdata, so that fuzzing starts from valid
+// EFI_SIGNATURE_LIST and authority payloads.
+func uefiVariableSeeds(f *testing.F) [][]byte {
+	logs := [][]byte{
+		testdata.Ubuntu2404AmdSevSnpEventLog,
+		testdata.Debian10EventLog,
+		testdata.Rhel8EventLog,
+		testdata.Cos85AmdSevEventLog,
+		testdata.Cos101AmdSevEventLog,
+		testdata.Cos121AmdSevEventLog,
+		testdata.ArchLinuxWorkstationEventLog,
+		testdata.GlinuxAlexEventLog,
+	}
+	var seeds [][]byte
+	for _, raw := range logs {
+		el, err := ParseEventLog(raw, ParseOpts{})
+		if err != nil {
+			f.Fatalf("ParseEventLog failed on seed log: %v", err)
+		}
+		if len(el.Algs) == 0 {
+			f.Fatal("seed log has no digest algorithms")
+		}
+		for _, e := range el.Events(el.Algs[0]) {
+			switch e.UntrustedType() {
+			case EFIVariableDriverConfig, EFIVariableAuthority, EFIVariableBoot:
+				seeds = append(seeds, e.RawData())
+			}
+		}
+	}
+	return seeds
+}
+
+func FuzzParseUEFIVariableData(f *testing.F) {
+	for _, seed := range uefiVariableSeeds(f) {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		v, err := ParseUEFIVariableData(bytes.NewReader(data))
+		if err != nil {
+			return
+		}
+		_ = v.VarName()
+		_, _, _ = v.SignatureData()
+		_, _ = ParseUEFIVariableAuthority(v)
+
+		encoded, err := v.Encode()
+		if err != nil {
+			t.Fatalf("Encode failed on successfully parsed data: %v", err)
+		}
+		reparsed, err := ParseUEFIVariableData(bytes.NewReader(encoded))
+		if err != nil {
+			t.Fatalf("ParseUEFIVariableData failed on re-encoded data: %v", err)
+		}
+		if diff := cmp.Diff(v, reparsed); diff != "" {
+			t.Fatalf("UEFIVariableData roundtrip mismatch (-want +got):\n%s", diff)
+		}
+	})
 }
