@@ -25,6 +25,7 @@ import (
 
 	"github.com/google/go-eventlog/internal/testutil"
 	"github.com/google/go-eventlog/register"
+	"github.com/google/go-eventlog/testdata"
 	"github.com/google/go-tpm/legacy/tpm2"
 )
 
@@ -453,4 +454,45 @@ func TestReplayPCRSWithHCRTM(t *testing.T) {
 			t.Errorf("replayPCR(%v, %v) returned %v, want %v", tc, testMR, ok, tc.expectSuccess)
 		}
 	}
+}
+
+func FuzzParseEventLog(f *testing.F) {
+	f.Add(testdata.Ubuntu2404AmdSevSnpEventLog)
+	f.Add(testdata.Debian10EventLog)
+	f.Add(testdata.Rhel8EventLog)
+	f.Add(testdata.Cos85AmdSevEventLog)
+	f.Add(testdata.Cos93AmdSevEventLog)
+	f.Add(testdata.Cos101AmdSevEventLog)
+	f.Add(testdata.Cos121AmdSevEventLog)
+	f.Add(testdata.ArchLinuxWorkstationEventLog)
+	f.Add(testdata.GlinuxAlexEventLog)
+	f.Add(testdata.GdcHost)
+	f.Add(testdata.HostGMESEventLog)
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		_, strictErr := ParseEventLog(data, ParseOpts{
+			AllowPadding: false,
+		})
+		el, err := ParseEventLog(data, ParseOpts{
+			AllowPadding: true,
+		})
+		if strictErr == nil && err != nil {
+			t.Fatalf("ParseEventLog with AllowPadding: true failed (%v) when AllowPadding: false succeeded", err)
+		}
+		if err != nil {
+			return
+		}
+		for _, alg := range el.Algs {
+			for _, e := range el.Events(alg) {
+				_ = e.UntrustedType()
+				_ = e.ReplayedDigest()
+				_ = e.RawData()
+				_ = e.MRIndex()
+				_ = e.Num()
+			}
+			if alg.CryptoHash().Available() {
+				_ = ConvertToPbEvents(alg.CryptoHash(), el.Events(alg))
+			}
+		}
+	})
 }
