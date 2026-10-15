@@ -118,7 +118,7 @@ func TestParseEfiSignatureListRejectsSignatureSizeTooSmall(t *testing.T) {
 		SignatureSize:       0,
 	}, 16)
 	if _, _, err := parseEfiSignatureList(b); err == nil || !strings.Contains(err.Error(), "signature size too small") {
-		t.Fatalf("parseEfiSignatureList error = %v, want error containing %q", err, "signature size too small")
+		t.Errorf("parseEfiSignatureList error = %v, want error containing %q", err, "signature size too small")
 	}
 }
 
@@ -130,7 +130,7 @@ func TestParseEfiSignatureListRejectsSignatureListSizeSmallerThanHeader(t *testi
 		SignatureSize:       48,
 	}, 48)
 	if _, _, err := parseEfiSignatureList(b); err == nil || !strings.Contains(err.Error(), "signature list too small") {
-		t.Fatalf("parseEfiSignatureList error = %v, want error containing %q", err, "signature list too small")
+		t.Errorf("parseEfiSignatureList error = %v, want error containing %q", err, "signature list too small")
 	}
 }
 
@@ -142,7 +142,7 @@ func TestParseEfiSignatureListRejectsSignatureSizeExceedingListSize(t *testing.T
 		SignatureSize:       48,
 	}, 48)
 	if _, _, err := parseEfiSignatureList(b); err == nil || !strings.Contains(err.Error(), "exceeds signature list size") {
-		t.Fatalf("parseEfiSignatureList error = %v, want error containing %q", err, "exceeds signature list size")
+		t.Errorf("parseEfiSignatureList error = %v, want error containing %q", err, "exceeds signature list size")
 	}
 }
 
@@ -154,7 +154,7 @@ func TestParseEfiSignatureListRejectsPayloadExceedingBuffer(t *testing.T) {
 		SignatureSize:       48,
 	}, 10)
 	if _, _, err := parseEfiSignatureList(b); err == nil || !strings.Contains(err.Error(), "exceeds remaining buffer") {
-		t.Fatalf("parseEfiSignatureList error = %v, want error containing %q", err, "exceeds remaining buffer")
+		t.Errorf("parseEfiSignatureList error = %v, want error containing %q", err, "exceeds remaining buffer")
 	}
 }
 
@@ -214,7 +214,7 @@ func FuzzParseUEFIVariableData(f *testing.F) {
 			t.Fatalf("ParseUEFIVariableData failed on re-encoded data: %v", err)
 		}
 		if diff := cmp.Diff(v, reparsed); diff != "" {
-			t.Fatalf("UEFIVariableData roundtrip mismatch (-want +got):\n%s", diff)
+			t.Errorf("UEFIVariableData roundtrip mismatch (-want +got):\n%s", diff)
 		}
 	})
 }
