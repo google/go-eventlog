@@ -53,6 +53,22 @@ var (
 	HostGMESEventLog []byte
 )
 
+// Raw binary CCEL Event Logs and ACPI tables.
+var (
+	//go:embed eventlogs/ccel/CCEL.bin
+	CCELTable []byte
+	//go:embed eventlogs/ccel/cos-113-intel-tdx.bin
+	Cos113IntelTdxCCELEventLog []byte
+	//go:embed eventlogs/ccel/cos-113-intel-tdx.table.bin
+	Cos113IntelTdxCCELTable []byte
+	//go:embed eventlogs/ccel/cos-113-intel-tdx-dupe-separator.bin
+	Cos113IntelTdxDupeSeparatorCCELEventLog []byte
+	//go:embed eventlogs/ccel/gdc-tdx.bin
+	GdcTdxCCELEventLog []byte
+	//go:embed eventlogs/ccel/ubuntu-2404-intel-tdx.bin
+	Ubuntu2404IntelTdxCCELEventLog []byte
+)
+
 // Kernel command lines from event logs.
 var (
 	Cos85AmdSevCmdline         = "/syslinux/vmlinuz.A init=/usr/lib/systemd/systemd boot=local rootwait ro noresume noswap loglevel=7 noinitrd console=ttyS0 security=apparmor virtio_net.napi_tx=1 systemd.unified_cgroup_hierarchy=false systemd.legacy_systemd_cgroup_controller=false csm.disabled=1 loadpin.exclude=kernel-module modules-load=loadpin_trigger module.sig_enforce=1 dm_verity.error_behavior=3 dm_verity.max_bios=-1 dm_verity.dev_wait=1 i915.modeset=1 cros_efi root=/dev/dm-0 \"dm=1 vroot none ro 1,0 4077568 verity payload=PARTUUID=EF8ECEE2-2385-AE4F-A146-1ED93D8AC217 hashtree=PARTUUID=EF8ECEE2-2385-AE4F-A146-1ED93D8AC217 hashstart=4077568 alg=sha256 root_hexdigest=795872ee03859c10dfcc4d67b4b96c85094b340c2d8784783abc2fa12a6ed671 salt=40eb77fb9093cbff56a6f9c2214c4f7554817d079513b7c77de4953d6b8ffc16\"\x00"
