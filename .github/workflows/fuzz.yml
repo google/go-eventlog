@@ -28,7 +28,8 @@ jobs:
         with:
           go-version: stable
       - name: Run Go Fuzz (${{ matrix.target }})
-        run: go test ${{ matrix.pkg }} -run=^$ -fuzz=^${{ matrix.target }}$ -fuzztime=30s
+        # Default minimization (up to 60s per input) would consume -fuzztime.
+        run: go test ${{ matrix.pkg }} -run=^$ -fuzz=^${{ matrix.target }}$ -fuzztime=30s -fuzzminimizetime=0
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: failure()
         with:
