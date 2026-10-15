@@ -24,6 +24,7 @@ import (
 	"github.com/google/go-eventlog/extract"
 	"github.com/google/go-eventlog/register"
 	"github.com/google/go-eventlog/tcg"
+	"github.com/google/go-eventlog/testdata"
 )
 
 func TestReplayAndExtract(t *testing.T) {
@@ -121,37 +122,10 @@ func TestReplayAndExtractEmptyLog(t *testing.T) {
 }
 
 func FuzzCCELReplayAndExtract(f *testing.F) {
-	tableBytes, err := os.ReadFile("../testdata/eventlogs/ccel/CCEL.bin")
-	if err != nil {
-		f.Fatalf("failed to read CCEL.bin: %v", err)
-	}
-	elBytes, err := os.ReadFile("../testdata/eventlogs/ccel/cos-113-intel-tdx.bin")
-	if err != nil {
-		f.Fatalf("failed to read cos-113-intel-tdx.bin: %v", err)
-	}
-	f.Add(tableBytes, elBytes)
-
-	tableBytes2, err := os.ReadFile("../testdata/eventlogs/ccel/cos-113-intel-tdx.table.bin")
-	if err != nil {
-		f.Fatalf("failed to read cos-113-intel-tdx.table.bin: %v", err)
-	}
-	elBytes2, err := os.ReadFile("../testdata/eventlogs/ccel/cos-113-intel-tdx-dupe-separator.bin")
-	if err != nil {
-		f.Fatalf("failed to read cos-113-intel-tdx-dupe-separator.bin: %v", err)
-	}
-	f.Add(tableBytes2, elBytes2)
-
-	gdcBytes, err := os.ReadFile("../testdata/eventlogs/ccel/gdc-tdx.bin")
-	if err != nil {
-		f.Fatalf("failed to read gdc-tdx.bin: %v", err)
-	}
-	f.Add(tableBytes, gdcBytes)
-
-	ubuntuBytes, err := os.ReadFile("../testdata/eventlogs/ccel/ubuntu-2404-intel-tdx.bin")
-	if err != nil {
-		f.Fatalf("failed to read ubuntu-2404-intel-tdx.bin: %v", err)
-	}
-	f.Add(tableBytes, ubuntuBytes)
+	f.Add(testdata.CCELTable, testdata.Cos113IntelTdxCCELEventLog)
+	f.Add(testdata.Cos113IntelTdxCCELTable, testdata.Cos113IntelTdxDupeSeparatorCCELEventLog)
+	f.Add(testdata.CCELTable, testdata.GdcTdxCCELEventLog)
+	f.Add(testdata.CCELTable, testdata.Ubuntu2404IntelTdxCCELEventLog)
 
 	f.Fuzz(func(_ *testing.T, acpiTable []byte, ccelData []byte) {
 		arbitraryRTMRs := make([]register.RTMR, 4)
