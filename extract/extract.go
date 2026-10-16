@@ -141,6 +141,10 @@ type separatorInfo struct {
 	separatorDigests [][]byte
 }
 
+// errRetypedSeparator reports an event that has separator data but not the
+// separator event type.
+var errRetypedSeparator = errors.New("event contains separator data but non-separator type")
+
 // getSeparatorInfo is used to return the valid event data and their corresponding
 // digests. This is useful for events like separators, where the data is known
 // ahead of time.
@@ -151,6 +155,7 @@ func getSeparatorInfo(hash crypto.Hash) *separatorInfo {
 	sepData := [][]byte{{0, 0, 0, 0}, {0xff, 0xff, 0xff, 0xff}}
 	sepDigests := make([][]byte, 0, len(sepData))
 	for _, value := range sepData {
+		hasher.Reset()
 		hasher.Write(value)
 		sepDigests = append(sepDigests, hasher.Sum(nil))
 	}
@@ -173,7 +178,7 @@ func checkIfValidSeparator(event tcg.Event, sepInfo *separatorInfo) (bool, error
 	// certain vulnerabilities in event parsing. For more info see:
 	// https://github.com/google/go-attestation/blob/master/docs/event-log-disclosure.md
 	if evtType != tcg.Separator {
-		return false, fmt.Errorf("MR%d event contains separator data but non-separator type %d", index, evtType)
+		return false, fmt.Errorf("MR%d %w %d", index, errRetypedSeparator, evtType)
 	}
 	if !event.DigestVerified() {
 		return false, fmt.Errorf("unverified separator digest for MR%d", index)
