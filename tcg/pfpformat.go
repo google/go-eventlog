@@ -329,15 +329,13 @@ func (e *EventLog) verify(mrs []register.MR) ([]Event, error) {
 	}
 	return events, nil
 }
-func extend(pcr register.MR, replay []byte, e rawEvent, locality byte) (pcrDigest []byte, eventDigest []byte, err error) {
-	h := pcr.DgstAlg()
-
+func extend(h crypto.Hash, replay []byte, e rawEvent, locality byte) (pcrDigest []byte, eventDigest []byte, err error) {
 	for _, digest := range e.digests {
-		if digest.hash != pcr.DgstAlg() {
+		if digest.hash != h {
 			continue
 		}
-		if len(digest.data) != len(pcr.Dgst()) {
-			return nil, nil, fmt.Errorf("digest data length (%d) doesn't match PCR digest length (%d)", len(digest.data), len(pcr.Dgst()))
+		if len(digest.data) != h.Size() {
+			return nil, nil, fmt.Errorf("digest data length (%d) doesn't match PCR digest length (%d)", len(digest.data), h.Size())
 		}
 		hash := h.New()
 		if len(replay) != 0 {
@@ -350,20 +348,17 @@ func extend(pcr register.MR, replay []byte, e rawEvent, locality byte) (pcrDiges
 		hash.Write(digest.data)
 		return hash.Sum(nil), digest.data, nil
 	}
-	return nil, nil, fmt.Errorf("no event digest matches pcr algorithm: %v", pcr.DgstAlg())
+	return nil, nil, fmt.Errorf("no event digest matches pcr algorithm: %v", h)
 }
 
-// replayPCR replays the event log for a specific PCR, using pcr and
-// event digests with the algorithm in pcr. An error is returned if the
-// replayed values do not match the final PCR digest, or any event tagged
-// with that PCR does not possess an event digest with the specified algorithm.
-func replayPCR(rawEvents []rawEvent, mr register.MR) ([]Event, bool) {
+// replayIndex replays the events for register mrIdx using digests for h,
+// returning the final value and the events that extended it.
+func replayIndex(rawEvents []rawEvent, mrIdx int, h crypto.Hash) ([]byte, []Event, error) {
 	var (
 		replay    []byte
 		outEvents []Event
 		locality  byte
 	)
-	mrIdx := mr.Idx()
 	for _, e := range rawEvents {
 		if e.index != mrIdx {
 			continue
@@ -374,7 +369,7 @@ func replayPCR(rawEvents []rawEvent, mr register.MR) ([]Event, bool) {
 		// TPM2_Startup() was issued. The initial value of
 		// PCR0 is equal to the locality.
 		if e.typ == eventTypeNoAction {
-			if mr.Idx() == 0 && len(e.data) == 17 && strings.HasPrefix(string(e.data), "StartupLocality") {
+			if mrIdx == 0 && len(e.data) == 17 && strings.HasPrefix(string(e.data), "StartupLocality") {
 				locality = e.data[len(e.data)-1]
 			}
 			continue
@@ -383,16 +378,16 @@ func replayPCR(rawEvents []rawEvent, mr register.MR) ([]Event, bool) {
 		if e.typ == EFIHCRTMEvent {
 			// Expect HCRTM to be the first event in the register.
 			if len(replay) != 0 {
-				return nil, false
+				return nil, nil, fmt.Errorf("H-CRTM event is not the first event in PCR %d", mrIdx)
 			}
 
 			// HCRTM resets the PCR to {0, ... 0, 4} prior to extending.
-			replay = append(bytes.Repeat([]byte{0x00}, mr.DgstAlg().Size()-1), byte(0x04))
+			replay = append(bytes.Repeat([]byte{0x00}, h.Size()-1), byte(0x04))
 		}
 
-		replayValue, digest, err := extend(mr, replay, e, locality)
+		replayValue, digest, err := extend(h, replay, e, locality)
 		if err != nil {
-			return nil, false
+			return nil, nil, fmt.Errorf("PCR %d: %v", mrIdx, err)
 		}
 		replay = replayValue
 		outEvents = append(outEvents, Event{
@@ -401,10 +396,21 @@ func replayPCR(rawEvents []rawEvent, mr register.MR) ([]Event, bool) {
 			Digest:   digest,
 			Index:    mrIdx,
 			Type:     e.typ,
-			hash:     mr.DgstAlg(),
+			hash:     h,
 		})
 	}
+	return replay, outEvents, nil
+}
 
+// replayPCR replays the event log for a specific PCR, using pcr and
+// event digests with the algorithm in pcr. It returns false if the replayed
+// value does not match the final PCR digest, or any event tagged with that
+// PCR does not possess an event digest with the specified algorithm.
+func replayPCR(rawEvents []rawEvent, mr register.MR) ([]Event, bool) {
+	replay, outEvents, err := replayIndex(rawEvents, mr.Idx(), mr.DgstAlg())
+	if err != nil {
+		return nil, false
+	}
 	if len(outEvents) > 0 && !bytes.Equal(replay, mr.Dgst()) {
 		return nil, false
 	}
