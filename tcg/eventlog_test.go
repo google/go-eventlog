@@ -17,12 +17,15 @@ package tcg
 import (
 	"bytes"
 	"crypto"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"os"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/go-eventlog/internal/testutil"
 	"github.com/google/go-eventlog/register"
 	"github.com/google/go-tpm/legacy/tpm2"
@@ -91,6 +94,131 @@ func testEventLog(t *testing.T, testdata string) {
 		if e.sequence != i {
 			t.Errorf("event out of order: events[%d].sequence = %d, want %d", i, e.sequence, i)
 		}
+	}
+}
+
+func TestReplay(t *testing.T) {
+	for _, testdata := range []string{
+		"../testdata/legacydata/linux_tpm12.json",
+		"../testdata/legacydata/windows_gcp_shielded_vm.json",
+	} {
+		t.Run(testdata, func(t *testing.T) {
+			data, err := os.ReadFile(testdata)
+			if err != nil {
+				t.Fatalf("reading test data: %v", err)
+			}
+			var dump testutil.Dump
+			if err := json.Unmarshal(data, &dump); err != nil {
+				t.Fatalf("parsing test data: %v", err)
+			}
+			el, err := ParseEventLog(dump.Log.Raw, ParseOpts{})
+			if err != nil {
+				t.Fatalf("parsing event log: %v", err)
+			}
+			for _, alg := range el.Algs {
+				got, err := el.Replay(alg)
+				if err != nil {
+					t.Fatalf("Replay(%v) failed: %v", alg, err)
+				}
+				if len(got) == 0 {
+					t.Fatalf("Replay(%v) returned no PCRs", alg)
+				}
+				want := map[int][]byte{}
+				for _, pcr := range dump.Log.PCRs {
+					if pcr.DigestAlg == alg.CryptoHash() {
+						want[pcr.Index] = pcr.Digest
+					}
+				}
+				wantIdx := map[int]bool{}
+				for _, re := range el.rawEvents {
+					if re.typ != eventTypeNoAction {
+						wantIdx[re.index] = true
+					}
+				}
+				gotIdx := map[int]bool{}
+				for _, pcr := range got {
+					gotIdx[pcr.Index] = true
+					if !bytes.Equal(pcr.Digest, want[pcr.Index]) {
+						t.Errorf("Replay(%v) PCR %d = %x, want %x", alg, pcr.Index, pcr.Digest, want[pcr.Index])
+					}
+				}
+				if diff := cmp.Diff(wantIdx, gotIdx); diff != "" {
+					t.Errorf("Replay(%v) PCR indices mismatch (-want +got):\n%s", alg, diff)
+				}
+				if _, err := el.Verify(convertToMRs(got)); err != nil {
+					t.Errorf("Verify(Replay(%v)) failed: %v", alg, err)
+				}
+			}
+		})
+	}
+}
+
+func TestReplayCCEL(t *testing.T) {
+	data, err := os.ReadFile("../testdata/eventlogs/ccel/cos-113-intel-tdx.bin")
+	if err != nil {
+		t.Fatalf("reading test data: %v", err)
+	}
+	el, err := ParseEventLog(data, ParseOpts{AllowPadding: true})
+	if err != nil {
+		t.Fatalf("parsing event log: %v", err)
+	}
+	got, err := el.Replay(register.HashSHA384)
+	if err != nil {
+		t.Fatalf("Replay(SHA384) failed: %v", err)
+	}
+	want := []string{
+		"3fa2f61f395b7f5feefb4ec2df61297f109ad8abcd6410c1b7df60f21f37b19297fc35e544039c7e1edece752afd17f6",
+		"f62dbc072bd5d3f3438b7b35c39a727f5aea2ffc2473f43723953f530daf62504f0a7944aa62c41a86e8a878c2b122c1",
+		"4969684dc87381fc3b3134176c8d8806eaf0a901859f5f70cfae8d17714b46c10a8de219048c9fc09f11f381a6fbe7c1",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Replay(SHA384) returned %d registers, want %d", len(got), len(want))
+	}
+	for i, mr := range got {
+		if mr.Index != i+1 || hex.EncodeToString(mr.Digest) != want[i] {
+			t.Errorf("Replay(SHA384)[%d] = {Index: %d, Digest: %x}, want {Index: %d, Digest: %s}", i, mr.Index, mr.Digest, i+1, want[i])
+		}
+	}
+}
+
+func TestReplayErrors(t *testing.T) {
+	data, err := os.ReadFile("../testdata/legacydata/crypto_agile_eventlog")
+	if err != nil {
+		t.Fatalf("reading test data: %v", err)
+	}
+	el, err := ParseEventLog(data, ParseOpts{})
+	if err != nil {
+		t.Fatalf("parsing event log: %v", err)
+	}
+	for _, alg := range []register.HashAlg{
+		// Unsupported algorithm.
+		register.HashAlg(0),
+		// The log has no SHA384 digests.
+		register.HashSHA384,
+	} {
+		if _, err := el.Replay(alg); err == nil {
+			t.Errorf("Replay(%v) succeeded, want error", alg)
+		}
+	}
+}
+
+func TestReplayStartupLocality(t *testing.T) {
+	d := bytes.Repeat([]byte{0xab}, crypto.SHA256.Size())
+	el := &EventLog{rawEvents: []rawEvent{
+		{index: 0, typ: eventTypeNoAction, data: append([]byte("StartupLocality\x00"), 3)},
+		{index: 0, typ: EFIEventBase, digests: []digest{{crypto.SHA256, d}}},
+		// An index with only NoAction events is not extended.
+		{index: 1, typ: eventTypeNoAction},
+	}}
+	got, err := el.Replay(register.HashSHA256)
+	if err != nil {
+		t.Fatalf("Replay(SHA256) failed: %v", err)
+	}
+
+	sum := sha256.Sum256(append(append(make([]byte, sha256.Size-1), 3), d...))
+	want := []register.PCR{{Index: 0, Digest: sum[:], DigestAlg: crypto.SHA256}}
+	if diff := cmp.Diff(want, got, cmpopts.IgnoreUnexported(register.PCR{})); diff != "" {
+		t.Errorf("Replay(SHA256) mismatch (-want +got):\n%s", diff)
 	}
 }
 

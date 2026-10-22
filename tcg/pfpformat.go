@@ -319,6 +319,41 @@ func (e *EventLog) Verify(mrs []register.MR) ([]Event, error) {
 	return events, err
 }
 
+// Replay returns the register values the event log produces for hash, ordered
+// by index. Indices are those used in the log, so for a CCEL RTMR[n] has
+// Index n+1.
+//
+// Replay does not verify the log or apply EventlogWorkarounds; use Verify for
+// that.
+func (e *EventLog) Replay(hash register.HashAlg) ([]register.PCR, error) {
+	h := hash.CryptoHash()
+	if h == 0 {
+		return nil, fmt.Errorf("unsupported hash algorithm: %v", hash)
+	}
+	var indices []int
+	seen := map[int]bool{}
+	for _, re := range e.rawEvents {
+		if !seen[re.index] {
+			seen[re.index] = true
+			indices = append(indices, re.index)
+		}
+	}
+	sort.Ints(indices)
+
+	var pcrs []register.PCR
+	for _, idx := range indices {
+		replay, events, err := replayIndex(e.rawEvents, idx, h)
+		if err != nil {
+			return nil, err
+		}
+		if len(events) == 0 {
+			continue
+		}
+		pcrs = append(pcrs, register.PCR{Index: idx, Digest: replay, DigestAlg: h})
+	}
+	return pcrs, nil
+}
+
 func (e *EventLog) verify(mrs []register.MR) ([]Event, error) {
 	events, err := replayEvents(e.rawEvents, mrs)
 	if err != nil {
