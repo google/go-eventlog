@@ -17,10 +17,19 @@ package extract_test
 import (
 	"bytes"
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
+	"fmt"
+	"math/big"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -355,5 +364,226 @@ func TestSecureBootAllowEmptySBVar(t *testing.T) {
 
 		})
 	}
+}
 
+func TestParseSecurebootState_RejectsInvalidDigest(t *testing.T) {
+	tests := []struct {
+		name  string
+		event tcg.Event
+	}{
+		{
+			name: "EFIVariableDriverConfig",
+			event: tcg.Event{
+				Index:  7,
+				Type:   tcg.EFIVariableDriverConfig,
+				Data:   []byte{0x01, 0x02, 0x03},
+				Digest: make([]byte, 32),
+			},
+		},
+		{
+			name: "Separator_PCR7",
+			event: tcg.Event{
+				Index:  7,
+				Type:   tcg.Separator,
+				Data:   []byte{0x00, 0x00, 0x00, 0x00},
+				Digest: make([]byte, 32),
+			},
+		},
+		{
+			name: "Separator_PCR2",
+			event: tcg.Event{
+				Index:  2,
+				Type:   tcg.Separator,
+				Data:   []byte{0x00, 0x00, 0x00, 0x00},
+				Digest: make([]byte, 32),
+			},
+		},
+		{
+			name: "EFIAction",
+			event: tcg.Event{
+				Index:  7,
+				Type:   tcg.EFIAction,
+				Data:   []byte("UEFI Debug Mode"),
+				Digest: make([]byte, 32),
+			},
+		},
+		{
+			name: "EFIVariableAuthority",
+			event: tcg.Event{
+				Index:  7,
+				Type:   tcg.EFIVariableAuthority,
+				Data:   []byte{0x01, 0x02, 0x03},
+				Digest: make([]byte, 32),
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := extract.ParseSecurebootState([]tcg.Event{tc.event}, extract.TPMRegisterConfig, extract.Opts{})
+			if err == nil {
+				t.Fatalf("ParseSecurebootState() succeeded, want error for invalid digest")
+			}
+			wantErr := fmt.Sprintf("invalid digest on %v event 0", tc.event.Type)
+			if !strings.Contains(err.Error(), wantErr) {
+				t.Errorf("ParseSecurebootState() error = %q, want substring %q", err.Error(), wantErr)
+			}
+		})
+	}
+}
+
+func TestParseSecurebootState_AcceptsExemptDriverDigestMismatch(t *testing.T) {
+	// Driver events measure the loaded PE image rather than the raw device path payload,
+	// so digest verification is not required. Placing the event after the separator on PCR 2
+	// bypasses image device path parsing while verifying that digest verification does not reject it.
+	sepDigest := sha256.Sum256([]byte{0x00, 0x00, 0x00, 0x00})
+	events := []tcg.Event{
+		{
+			Index:  2,
+			Type:   tcg.Separator,
+			Data:   []byte{0x00, 0x00, 0x00, 0x00},
+			Digest: sepDigest[:],
+		},
+		{
+			Index:  2,
+			Type:   tcg.EFIBootServicesDriver,
+			Data:   []byte("driver_binary_path"),
+			Digest: make([]byte, 32),
+		},
+	}
+	if _, err := extract.ParseSecurebootState(events, extract.TPMRegisterConfig, extract.Opts{}); err != nil {
+		t.Fatalf("ParseSecurebootState() failed: %v", err)
+	}
+}
+
+func buildShimAuthorityBuffer(t *testing.T, varName string, varData []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	// shimLockGUID: {0x605dab50, 0xe046, 0x4300, [8]byte{0xab, 0xb6, 0x3d, 0xd8, 0x10, 0xdd, 0x8b, 0x23}}
+	if err := binary.Write(&buf, binary.LittleEndian, uint32(0x605dab50)); err != nil {
+		t.Fatalf("binary.Write(Data1) failed: %v", err)
+	}
+	if err := binary.Write(&buf, binary.LittleEndian, uint16(0xe046)); err != nil {
+		t.Fatalf("binary.Write(Data2) failed: %v", err)
+	}
+	if err := binary.Write(&buf, binary.LittleEndian, uint16(0x4300)); err != nil {
+		t.Fatalf("binary.Write(Data3) failed: %v", err)
+	}
+	if _, err := buf.Write([]byte{0xab, 0xb6, 0x3d, 0xd8, 0x10, 0xdd, 0x8b, 0x23}); err != nil {
+		t.Fatalf("buf.Write(Data4) failed: %v", err)
+	}
+	if err := binary.Write(&buf, binary.LittleEndian, uint64(len(varName))); err != nil {
+		t.Fatalf("binary.Write(UnicodeNameLength) failed: %v", err)
+	}
+	if err := binary.Write(&buf, binary.LittleEndian, uint64(len(varData))); err != nil {
+		t.Fatalf("binary.Write(VariableDataLength) failed: %v", err)
+	}
+	for _, c := range varName {
+		if err := binary.Write(&buf, binary.LittleEndian, uint16(c)); err != nil {
+			t.Fatalf("binary.Write(name char) failed: %v", err)
+		}
+	}
+	if _, err := buf.Write(varData); err != nil {
+		t.Fatalf("buf.Write(varData) failed: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func TestParseSecurebootState_AcceptsShimTrailingByteWorkaround(t *testing.T) {
+	// Construct a minimal UEFI variable authority event with an erroneous trailing byte (rhboot/shim bug 157).
+	// The workaround only applies when the payload also triggers ErrSigMissingGUID (i.e. older shim cert).
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("ecdsa.GenerateKey failed: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: "Shim Authority Cert",
+		},
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &priv.PublicKey, priv)
+	if err != nil {
+		t.Fatalf("x509.CreateCertificate failed: %v", err)
+	}
+
+	validBytes := buildShimAuthorityBuffer(t, "Shim", certDER)
+
+	// Calculate SHA-256 over valid payload, then append trailing byte to simulate shim bug.
+	digest := sha256.Sum256(validBytes)
+	malformedBytes := append(validBytes, 0x00)
+
+	events := []tcg.Event{
+		{
+			Index:  7,
+			Type:   tcg.EFIVariableAuthority,
+			Data:   malformedBytes,
+			Digest: digest[:],
+		},
+	}
+	if _, err := extract.ParseSecurebootState(events, extract.TPMRegisterConfig, extract.Opts{}); err != nil {
+		t.Fatalf("ParseSecurebootState() failed for shim trailing-byte event: %v", err)
+	}
+}
+
+func TestParseSecurebootState_RejectsTrailingByteWithoutMissingGUID(t *testing.T) {
+	// A variable like "SbatLevel" returns nil error (no ErrSigMissingGUID), so the single-byte
+	// workaround must not apply if its digest does not match.
+	validBytes := buildShimAuthorityBuffer(t, "SbatLevel", nil)
+	digest := sha256.Sum256(validBytes)
+	malformedBytes := append(validBytes, 0x00)
+
+	events := []tcg.Event{
+		{
+			Index:  7,
+			Type:   tcg.EFIVariableAuthority,
+			Data:   malformedBytes,
+			Digest: digest[:],
+		},
+	}
+	if _, err := extract.ParseSecurebootState(events, extract.TPMRegisterConfig, extract.Opts{}); err == nil {
+		t.Fatal("ParseSecurebootState() succeeded for trailing byte on non-shim event, want digest error")
+	}
+}
+
+func TestParseSecurebootState_AcceptsErrSigMissingGUID(t *testing.T) {
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("ecdsa.GenerateKey failed: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: "Shim Authority Cert",
+		},
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &priv.PublicKey, priv)
+	if err != nil {
+		t.Fatalf("x509.CreateCertificate failed: %v", err)
+	}
+
+	// In the shim bug / missing GUID variant, the variable payload is directly the DER cert
+	// without the 16-byte owner GUID prefix, causing ParseUEFIVariableAuthority to return ErrSigMissingGUID.
+	authorityBytes := buildShimAuthorityBuffer(t, "Shim", certDER)
+	digest := sha256.Sum256(authorityBytes)
+
+	events := []tcg.Event{
+		{
+			Index:  7,
+			Type:   tcg.EFIVariableAuthority,
+			Data:   authorityBytes,
+			Digest: digest[:],
+		},
+	}
+	out, err := extract.ParseSecurebootState(events, extract.TPMRegisterConfig, extract.Opts{})
+	if err != nil {
+		t.Fatalf("ParseSecurebootState() failed: %v", err)
+	}
+	if len(out.PreSeparatorAuthority) != 1 {
+		t.Fatalf("len(PreSeparatorAuthority) = %d, want 1", len(out.PreSeparatorAuthority))
+	}
+	if diff := cmp.Diff(certDER, out.PreSeparatorAuthority[0].Raw); diff != "" {
+		t.Errorf("authority cert mismatch (-want +got):\n%s", diff)
+	}
 }

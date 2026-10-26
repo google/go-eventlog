@@ -124,7 +124,10 @@ func ParseSecurebootState(events []tcg.Event, registerCfg registerConfig, opts O
 		if err != nil {
 			return nil, fmt.Errorf("unrecognised event type: %v", err)
 		}
-		digestVerify := DigestEquals(e, e.RawData())
+
+		if err := verifyEventDigest(e, et, registerCfg.SecureBootIdx); err != nil {
+			return nil, err
+		}
 
 		switch e.MRIndex() {
 		case registerCfg.SecureBootIdx:
@@ -137,18 +140,12 @@ func ParseSecurebootState(events []tcg.Event, registerCfg registerConfig, opts O
 				if !bytes.Equal(e.RawData(), []byte{0, 0, 0, 0}) {
 					return nil, fmt.Errorf("invalid separator data at event %d: %v", e.Num(), e.RawData())
 				}
-				if digestVerify != nil {
-					return nil, fmt.Errorf("invalid separator digest at event %d: %v", e.Num(), digestVerify)
-				}
 
 			case tcg.EFIAction:
 				switch string(e.RawData()) {
 				case "UEFI Debug Mode":
 					return nil, errors.New("a UEFI debugger was present during boot")
 				case "DMA Protection Disabled":
-					if digestVerify != nil {
-						return nil, fmt.Errorf("invalid digest for EFI Action 'DMA Protection Disabled' on event %d: %v", e.Num(), digestVerify)
-					}
 					out.DMAProtectionDisabled = true
 				default:
 					return nil, fmt.Errorf("event %d: unexpected EFI action event", e.Num())
@@ -165,10 +162,6 @@ func ParseSecurebootState(events []tcg.Event, registerCfg registerConfig, opts O
 				seenVars[v.VarName()] = true
 				if seenSeparator7 {
 					return nil, fmt.Errorf("event %d: variable %q specified after separator", e.Num(), v.VarName())
-				}
-
-				if digestVerify != nil {
-					return nil, fmt.Errorf("invalid digest for variable %q on event %d: %v", v.VarName(), e.Num(), digestVerify)
 				}
 
 				switch v.VarName() {
@@ -200,30 +193,35 @@ func ParseSecurebootState(events []tcg.Event, registerCfg registerConfig, opts O
 				}
 
 			case tcg.EFIVariableAuthority:
+				digestErr := DigestEquals(e, e.RawData())
+
 				v, err := tcg.ParseUEFIVariableData(bytes.NewReader(e.RawData()))
 				if err != nil {
+					if digestErr != nil {
+						return nil, fmt.Errorf("invalid digest on %v event %d: %w", et, e.Num(), digestErr)
+					}
 					return nil, fmt.Errorf("failed parsing UEFI variable data: %v", err)
 				}
 
 				a, err := tcg.ParseUEFIVariableAuthority(v)
 				if err != nil {
 					// Workaround for: https://github.com/google/go-attestation/issues/157
-					if err == tcg.ErrSigMissingGUID {
+					if errors.Is(err, tcg.ErrSigMissingGUID) {
 						// Versions of shim which do not carry
 						// https://github.com/rhboot/shim/commit/8a27a4809a6a2b40fb6a4049071bf96d6ad71b50
 						// have an erroneous additional byte in the event, which breaks digest
 						// verification. If verification failed, we try removing the last byte.
-						if digestVerify != nil && len(e.RawData()) > 0 {
-							digestVerify = DigestEquals(e, e.RawData()[:len(e.RawData())-1])
+						if digestErr != nil && len(e.RawData()) > 0 {
+							digestErr = DigestEquals(e, e.RawData()[:len(e.RawData())-1])
 						}
 					} else {
-						return nil, fmt.Errorf("failed parsing EFI variable authority at event %d: %v", e.Num(), err)
+						return nil, fmt.Errorf("failed parsing EFI variable authority at event %d: %w", e.Num(), err)
 					}
 				}
-				seenAuthority = true
-				if digestVerify != nil {
-					return nil, fmt.Errorf("invalid digest for authority on event %d: %v", e.Num(), digestVerify)
+				if digestErr != nil {
+					return nil, fmt.Errorf("invalid digest on %v event %d: %w", et, e.Num(), digestErr)
 				}
+				seenAuthority = true
 				if !seenSeparator7 {
 					out.PreSeparatorAuthority = append(out.PreSeparatorAuthority, a.Certs...)
 				} else {
@@ -246,9 +244,6 @@ func ParseSecurebootState(events []tcg.Event, registerCfg registerConfig, opts O
 				seenSeparator2 = true
 				if !bytes.Equal(e.RawData(), []byte{0, 0, 0, 0}) {
 					return nil, fmt.Errorf("invalid separator data at event %d: %v", e.Num(), e.RawData())
-				}
-				if digestVerify != nil {
-					return nil, fmt.Errorf("invalid separator digest at event %d: %v", e.Num(), digestVerify)
 				}
 
 			case tcg.EFIBootServicesDriver:
@@ -310,4 +305,27 @@ sourceLoop:
 		return nil, errors.New("secure boot was enabled but no keys or hashes were permitted")
 	}
 	return &out, nil
+}
+
+func requiresDigestVerification(mr uint32, et tcg.EventType, secureBootIdx uint32) bool {
+	if et == tcg.Separator {
+		return true
+	}
+	if mr == secureBootIdx {
+		switch et {
+		case tcg.EFIAction, tcg.EFIVariableDriverConfig:
+			return true
+		}
+	}
+	return false
+}
+
+func verifyEventDigest(e tcg.Event, et tcg.EventType, secureBootIdx uint32) error {
+	if !requiresDigestVerification(e.MRIndex(), et, secureBootIdx) {
+		return nil
+	}
+	if err := DigestEquals(e, e.RawData()); err != nil {
+		return fmt.Errorf("invalid digest on %v event %d: %w", et, e.Num(), err)
+	}
+	return nil
 }
