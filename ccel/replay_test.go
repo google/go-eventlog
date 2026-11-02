@@ -15,6 +15,7 @@
 package ccel
 
 import (
+	"crypto"
 	"os"
 	"strconv"
 	"strings"
@@ -22,6 +23,8 @@ import (
 
 	"github.com/google/go-eventlog/extract"
 	"github.com/google/go-eventlog/register"
+	"github.com/google/go-eventlog/tcg"
+	"github.com/google/go-eventlog/testdata"
 )
 
 func TestReplayAndExtract(t *testing.T) {
@@ -116,4 +119,71 @@ func TestReplayAndExtractEmptyLog(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to ReplayAndExtract from CCEL: %v", err)
 	}
+}
+
+func FuzzCCELReplayAndExtract(f *testing.F) {
+	f.Add(testdata.CCELTable, testdata.Cos113IntelTdxCCELEventLog)
+	f.Add(testdata.Cos113IntelTdxCCELTable, testdata.Cos113IntelTdxDupeSeparatorCCELEventLog)
+	f.Add(testdata.CCELTable, testdata.GdcTdxCCELEventLog)
+	f.Add(testdata.CCELTable, testdata.Ubuntu2404IntelTdxCCELEventLog)
+
+	f.Fuzz(func(_ *testing.T, acpiTable []byte, ccelData []byte) {
+		arbitraryRTMRs := make([]register.RTMR, 4)
+		for i := 0; i < 4; i++ {
+			arbitraryRTMRs[i] = register.RTMR{
+				Index:  i,
+				Digest: make([]byte, crypto.SHA384.Size()),
+			}
+		}
+		arbitraryBank := register.RTMRBank{
+			RTMRs: arbitraryRTMRs,
+		}
+		_, _ = ReplayAndExtract(acpiTable, ccelData, arbitraryBank, extract.Opts{
+			SkipACPITableCheck: false,
+		})
+
+		el, err := tcg.ParseEventLog(ccelData, tcg.ParseOpts{
+			AllowPadding: true,
+		})
+		if err != nil {
+			return
+		}
+
+		matchingRTMRs := make([]register.RTMR, 4)
+		for i := 0; i < 4; i++ {
+			matchingRTMRs[i] = register.RTMR{
+				Index:  i,
+				Digest: make([]byte, crypto.SHA384.Size()),
+			}
+			ccMRIndex := i + 1
+			var replay []byte
+			for _, e := range el.Events(register.HashSHA384) {
+				if int(e.MRIndex()) != ccMRIndex {
+					continue
+				}
+				if e.UntrustedType() == tcg.NoAction {
+					continue
+				}
+				h := crypto.SHA384.New()
+				if len(replay) == 0 {
+					replay = make([]byte, crypto.SHA384.Size())
+				}
+				h.Write(replay)
+				h.Write(e.ReplayedDigest())
+				replay = h.Sum(nil)
+			}
+			if len(replay) > 0 {
+				matchingRTMRs[i].Digest = replay
+			}
+		}
+
+		matchingBank := register.RTMRBank{
+			RTMRs: matchingRTMRs,
+		}
+		_, _ = ReplayAndExtract(acpiTable, ccelData, matchingBank, extract.Opts{
+			SkipACPITableCheck: true,
+			Loader:             extract.GRUB,
+			AllowEmptySBVar:    true,
+		})
+	})
 }
