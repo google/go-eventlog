@@ -912,45 +912,20 @@ func decodeHex(hexStr string) []byte {
 }
 
 func FuzzReplayAndExtract(f *testing.F) {
-	seedPCRBytes := make([]byte, 24*crypto.SHA256.Size())
-	f.Add(testdata.Ubuntu2404AmdSevSnpEventLog, seedPCRBytes)
-	f.Add(testdata.Cos101AmdSevEventLog, seedPCRBytes)
-	f.Add(testdata.Debian10EventLog, seedPCRBytes)
-	f.Add(testdata.Rhel8EventLog, seedPCRBytes)
-	f.Add(testdata.Cos85AmdSevEventLog, seedPCRBytes)
-	f.Add(testdata.Cos93AmdSevEventLog, seedPCRBytes)
-	f.Add(testdata.Cos121AmdSevEventLog, seedPCRBytes)
-	f.Add(testdata.ArchLinuxWorkstationEventLog, seedPCRBytes)
-	f.Add(testdata.GlinuxAlexEventLog, seedPCRBytes)
-	f.Add(testdata.GdcHost, seedPCRBytes)
-	f.Add(testdata.HostGMESEventLog, seedPCRBytes)
+	f.Add(testdata.Ubuntu2404AmdSevSnpEventLog)
+	f.Add(testdata.Cos101AmdSevEventLog)
+	f.Add(testdata.Debian10EventLog)
+	f.Add(testdata.Rhel8EventLog)
+	f.Add(testdata.Cos85AmdSevEventLog)
+	f.Add(testdata.Cos93AmdSevEventLog)
+	f.Add(testdata.Cos121AmdSevEventLog)
+	f.Add(testdata.ArchLinuxWorkstationEventLog)
+	f.Add(testdata.GlinuxAlexEventLog)
+	f.Add(testdata.GdcHost)
+	f.Add(testdata.HostGMESEventLog)
 
-	f.Fuzz(func(_ *testing.T, rawLog []byte, pcrBytes []byte) {
-		// Call 1: Construct PCRBank from pcrBytes.
-		pcrs := make([]register.PCR, 24)
-		for i := 0; i < 24; i++ {
-			d := make([]byte, crypto.SHA256.Size())
-			start := i * crypto.SHA256.Size()
-			if start < len(pcrBytes) {
-				end := start + crypto.SHA256.Size()
-				if end > len(pcrBytes) {
-					end = len(pcrBytes)
-				}
-				copy(d, pcrBytes[start:end])
-			}
-			pcrs[i] = register.PCR{
-				Index:     i,
-				Digest:    d,
-				DigestAlg: crypto.SHA256,
-			}
-		}
-		bank := register.PCRBank{
-			TCGHashAlgo: pb.HashAlgo_SHA256,
-			PCRs:        pcrs,
-		}
-		_, _ = ReplayAndExtract(rawLog, bank, extract.Opts{})
-
-		// Call 2: Pre-compute PCR digests from the parsed log so replay succeeds and extractors execute.
+	f.Fuzz(func(_ *testing.T, rawLog []byte) {
+		// Pre-compute PCR digests from the parsed log so replay succeeds and extractors execute.
 		// The bank calculation mirrors tcg.replayPCR: initializing PCR0 with StartupLocality, resetting
 		// the PCR to {0...0, 0x04} on EFIHCRTMEvent, skipping NoAction records, and extending each
 		// event's digest in order so the final PCR digests match the event sequence.
