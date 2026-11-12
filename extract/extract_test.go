@@ -721,6 +721,11 @@ func TestGMESStateErrors(t *testing.T) {
 		newEFIImageLoadEvent(t, gmes.PCRConfig.HostKernelIdx, 0x1000, 0x2000, 0x3000, []byte("test-dev-path")),
 		separatorEvent,
 	}
+	// EFI image-load events on PCR 21 carrying the H(00000000) and H(FFFFFFFF) separator digests.
+	zeroSepDigestEvent := newEFIImageLoadEvent(t, gmes.PCRConfig.HostKernelIdx, 0x1000, 0x2000, 0x3000, []byte("test-dev-path"))
+	zeroSepDigestEvent.Digest = separatorEvent.Digest
+	onesSepDigestEvent := newEFIImageLoadEvent(t, gmes.PCRConfig.HostKernelIdx, 0x1000, 0x2000, 0x3000, []byte("test-dev-path"))
+	onesSepDigestEvent.Digest = newEvent(t, gmes.PCRConfig.HostKernelIdx, tcg.Separator, []byte{0xff, 0xff, 0xff, 0xff}).Digest
 
 	testcases := []struct {
 		name           string
@@ -794,6 +799,40 @@ func TestGMESStateErrors(t *testing.T) {
 				newEvent(t, gmes.PCRConfig.BIOSIdx, tcg.GoogleDRTMEvent, []byte(gmes.BIOSData)),
 			),
 			expectedErrStr: "found duplicate event for MR",
+		},
+		{
+			name: "zero separator digest with non-separator type",
+			events: []tcg.Event{
+				validEvents[0], validEvents[1], validEvents[2],
+				zeroSepDigestEvent,
+				newEFIImageLoadEvent(t, gmes.PCRConfig.HostKernelIdx, 0x1000, 0x2000, 0x3000, []byte("other-dev-path")),
+				separatorEvent,
+			},
+			expectedErrStr: "separator data but non-separator type",
+		},
+		{
+			name: "ones separator digest with non-separator type",
+			events: []tcg.Event{
+				validEvents[0], validEvents[1], validEvents[2],
+				onesSepDigestEvent,
+				newEFIImageLoadEvent(t, gmes.PCRConfig.HostKernelIdx, 0x1000, 0x2000, 0x3000, []byte("other-dev-path")),
+				separatorEvent,
+			},
+			expectedErrStr: "separator data but non-separator type",
+		},
+		{
+			name: "two host kernel events before separator",
+			events: []tcg.Event{
+				validEvents[0], validEvents[1], validEvents[2],
+				newEFIImageLoadEvent(t, gmes.PCRConfig.HostKernelIdx, 0x1000, 0x2000, 0x3000, []byte("other-dev-path")),
+				separatorEvent,
+			},
+			expectedErrStr: "found duplicate event for MR",
+		},
+		{
+			name:           "missing host kernel event",
+			events:         []tcg.Event{validEvents[0], validEvents[1], separatorEvent},
+			expectedErrStr: "missing host kernel event",
 		},
 	}
 

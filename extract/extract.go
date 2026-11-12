@@ -529,6 +529,7 @@ func GMESState(hash crypto.Hash, events []tcg.Event) (*pb.GMESState, error) {
 	seenEvents := map[uint32]bool{
 		gmes.PCRConfig.BMCFirmwareIdx: false,
 		gmes.PCRConfig.BIOSIdx:        false,
+		gmes.PCRConfig.HostKernelIdx:  false,
 	}
 
 	// Track seen separators for PCRs requiring a separator.
@@ -536,41 +537,34 @@ func GMESState(hash crypto.Hash, events []tcg.Event) (*pb.GMESState, error) {
 		gmes.PCRConfig.HostKernelIdx: false,
 	}
 
+	separatorInfo := getSeparatorInfo(hash)
 	for _, event := range events {
 		eventType, err := tcg.UntrustedParseEventType(uint32(event.UntrustedType()))
 		if err != nil {
 			return nil, err
 		}
 
-		// Handle separator types.
-		if eventType == tcg.Separator {
+		isSeparator, err := checkIfValidSeparator(event, separatorInfo)
+		if err != nil {
+			return nil, fmt.Errorf("error checking for valid separator: %v", err)
+		}
+		if isSeparator {
 			seen, ok := seenSeparators[event.MRIndex()]
 			if ok && seen {
 				return nil, fmt.Errorf("duplicate separator event at MR%d", event.MRIndex())
-			}
-
-			separatorInfo := getSeparatorInfo(hash)
-			isSeparator, err := checkIfValidSeparator(event, separatorInfo)
-			if err != nil {
-				return nil, fmt.Errorf("error checking for valid separator: %v", err)
-			}
-
-			if !isSeparator {
-				return nil, fmt.Errorf("event contains separator type but not separator content %d", event.Num())
 			}
 
 			seenSeparators[event.MRIndex()] = true
 			continue
 		}
 
+		if seen, ok := seenSeparators[event.MRIndex()]; ok && seen {
+			return nil, fmt.Errorf("found event after separator for MR%d at event %d", event.MRIndex(), event.Num())
+		}
+
 		// Check for seen events.
 		if seen, ok := seenEvents[event.MRIndex()]; ok && seen {
 			return nil, fmt.Errorf("found duplicate event for MR%d at event %d, expect only one event in register", event.MRIndex(), event.Num())
-		}
-
-		// Check for seen separators.
-		if seen, ok := seenSeparators[event.MRIndex()]; ok && seen {
-			return nil, fmt.Errorf("found event after separator for MR%d at event %d", event.MRIndex(), event.Num())
 		}
 
 		registerCfg := gmes.PCRConfig
@@ -590,6 +584,7 @@ func GMESState(hash crypto.Hash, events []tcg.Event) (*pb.GMESState, error) {
 			state.BiosDigest = event.ReplayedDigest()
 
 		case registerCfg.HostKernelIdx:
+			seenEvents[event.MRIndex()] = true
 			if eventType != tcg.EFIBootServicesApplication {
 				return nil, fmt.Errorf("unexpected event type for host kernel event: %d", eventType)
 			}
@@ -611,6 +606,11 @@ func GMESState(hash crypto.Hash, events []tcg.Event) (*pb.GMESState, error) {
 		if !seen {
 			return nil, fmt.Errorf("missing separator event for MR%d", mrIndex)
 		}
+	}
+
+	// Require one host kernel event to be presented in the eventlog.
+	if !seenEvents[gmes.PCRConfig.HostKernelIdx] {
+		return nil, fmt.Errorf("missing host kernel event for MR%d", gmes.PCRConfig.HostKernelIdx)
 	}
 
 	return state, nil
