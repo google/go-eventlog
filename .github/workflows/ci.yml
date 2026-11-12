@@ -33,7 +33,7 @@ jobs:
           - os: macos-latest
             architecture: arm64
             go-version: 1.20.x
-          - os: macos-14-large
+          - os: macos-15-large
             architecture: x64
             go-version: 1.20.x
     name: Generate/Build/Test (${{ matrix.os }}, ${{ matrix.architecture }}, Go ${{ matrix.go-version }})
