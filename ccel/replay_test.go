@@ -121,6 +121,21 @@ func TestReplayAndExtractEmptyLog(t *testing.T) {
 	}
 }
 
+func TestReplayAndExtractRTMRMismatch(t *testing.T) {
+	elBytes, err := os.ReadFile(COS113TDX.fname)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zeroRTMRs := make([]register.RTMR, 4)
+	for i := range zeroRTMRs {
+		zeroRTMRs[i] = register.RTMR{Index: i, Digest: make([]byte, crypto.SHA384.Size())}
+	}
+	opts := extract.Opts{Loader: extract.GRUB, SkipACPITableCheck: true}
+	if _, err := ReplayAndExtract(nil, elBytes, register.RTMRBank{RTMRs: zeroRTMRs}, opts); err == nil {
+		t.Errorf("ReplayAndExtract(%s, zero RTMRs) error = nil, want replay error", COS113TDX.fname)
+	}
+}
+
 func FuzzCCELReplayAndExtract(f *testing.F) {
 	f.Add(testdata.CCELTable, testdata.Cos113IntelTdxCCELEventLog)
 	f.Add(testdata.Cos113IntelTdxCCELTable, testdata.Cos113IntelTdxDupeSeparatorCCELEventLog)
@@ -128,20 +143,6 @@ func FuzzCCELReplayAndExtract(f *testing.F) {
 	f.Add(testdata.CCELTable, testdata.Ubuntu2404IntelTdxCCELEventLog)
 
 	f.Fuzz(func(_ *testing.T, acpiTable []byte, ccelData []byte) {
-		arbitraryRTMRs := make([]register.RTMR, 4)
-		for i := 0; i < 4; i++ {
-			arbitraryRTMRs[i] = register.RTMR{
-				Index:  i,
-				Digest: make([]byte, crypto.SHA384.Size()),
-			}
-		}
-		arbitraryBank := register.RTMRBank{
-			RTMRs: arbitraryRTMRs,
-		}
-		_, _ = ReplayAndExtract(acpiTable, ccelData, arbitraryBank, extract.Opts{
-			SkipACPITableCheck: false,
-		})
-
 		el, err := tcg.ParseEventLog(ccelData, tcg.ParseOpts{
 			AllowPadding: true,
 		})
@@ -181,9 +182,8 @@ func FuzzCCELReplayAndExtract(f *testing.F) {
 			RTMRs: matchingRTMRs,
 		}
 		_, _ = ReplayAndExtract(acpiTable, ccelData, matchingBank, extract.Opts{
-			SkipACPITableCheck: true,
-			Loader:             extract.GRUB,
-			AllowEmptySBVar:    true,
+			Loader:          extract.GRUB,
+			AllowEmptySBVar: true,
 		})
 	})
 }
