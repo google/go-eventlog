@@ -158,6 +158,53 @@ func TestParseEfiSignatureListRejectsPayloadExceedingBuffer(t *testing.T) {
 	}
 }
 
+func TestParseUEFIVariableAuthorityHash(t *testing.T) {
+	// When an image is allowed by its digest, firmware and shim measure the
+	// matching hash entry (an EFI_SIGNATURE_DATA) of db or MokListRT.
+	imageSecurityDatabaseGUID := efiGUID{0xd719b2cb, 0x3d3a, 0x4596, [8]byte{0xa3, 0xbc, 0xda, 0xd0, 0x0e, 0x67, 0x65, 0x6f}}
+	owner := bytes.Repeat([]byte{0x11}, 16)
+	tests := []struct {
+		name    string
+		guid    efiGUID
+		varName []uint16
+		digest  []byte
+	}{
+		{"db SHA-256", imageSecurityDatabaseGUID, []uint16{'d', 'b'}, bytes.Repeat([]byte{0xab}, crypto.SHA256.Size())},
+		{"db SHA-1", imageSecurityDatabaseGUID, []uint16{'d', 'b'}, bytes.Repeat([]byte{0xab}, crypto.SHA1.Size())},
+		{"MokListRT SHA-256", shimLockGUID, []uint16{'M', 'o', 'k', 'L', 'i', 's', 't', 'R', 'T'}, bytes.Repeat([]byte{0xab}, crypto.SHA256.Size())},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			v := UEFIVariableData{
+				Header:       UEFIVariableDataHeader{VariableName: tc.guid},
+				UnicodeName:  tc.varName,
+				VariableData: append(append([]byte{}, owner...), tc.digest...),
+			}
+			a, err := ParseUEFIVariableAuthority(v)
+			if err != nil {
+				t.Fatalf("ParseUEFIVariableAuthority() failed: %v", err)
+			}
+			if len(a.Certs) != 0 {
+				t.Errorf("len(Certs) = %d, want 0", len(a.Certs))
+			}
+			if diff := cmp.Diff([][]byte{tc.digest}, a.Hashes); diff != "" {
+				t.Errorf("Hashes mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+
+	t.Run("neither certificate nor digest", func(t *testing.T) {
+		v := UEFIVariableData{
+			Header:       UEFIVariableDataHeader{VariableName: imageSecurityDatabaseGUID},
+			UnicodeName:  []uint16{'d', 'b'},
+			VariableData: append(append([]byte{}, owner...), bytes.Repeat([]byte{0xab}, 31)...),
+		}
+		if _, err := ParseUEFIVariableAuthority(v); err == nil {
+			t.Error("ParseUEFIVariableAuthority() succeeded, want error")
+		}
+	})
+}
+
 // uefiVariableSeeds returns the raw data of every UEFI variable event found in
 // the real-world event logs in testdata, so that fuzzing starts from valid
 // EFI_SIGNATURE_LIST and authority payloads.

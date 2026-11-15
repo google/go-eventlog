@@ -56,6 +56,12 @@ type SecurebootState struct {
 	// PostSeparatorAuthority describes the use of a secure-boot key to authorize
 	// the execution of a binary after the separator.
 	PostSeparatorAuthority []x509.Certificate
+	// PreSeparatorAuthorityHashes describes the use of a secure-boot hash
+	// entry to authorize the execution of a binary before the separator.
+	PreSeparatorAuthorityHashes [][]byte
+	// PostSeparatorAuthorityHashes describes the use of a secure-boot hash
+	// entry to authorize the execution of a binary after the separator.
+	PostSeparatorAuthorityHashes [][]byte
 
 	// DriverLoadSourceHints describes the origin of boot services drivers.
 	// This data is not tamper-proof and must only be used as a hint.
@@ -224,8 +230,10 @@ func ParseSecurebootState(events []tcg.Event, registerCfg registerConfig, opts O
 				seenAuthority = true
 				if !seenSeparator7 {
 					out.PreSeparatorAuthority = append(out.PreSeparatorAuthority, a.Certs...)
+					out.PreSeparatorAuthorityHashes = append(out.PreSeparatorAuthorityHashes, a.Hashes...)
 				} else {
 					out.PostSeparatorAuthority = append(out.PostSeparatorAuthority, a.Certs...)
+					out.PostSeparatorAuthorityHashes = append(out.PostSeparatorAuthorityHashes, a.Hashes...)
 				}
 
 			default:
