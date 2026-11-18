@@ -98,6 +98,50 @@ func TestEfiStateRejectsRetypedSeparator(t *testing.T) {
 	}
 }
 
+// A retyped separator must not let later forged events appear pre-separator.
+func TestParseSecurebootStateRejectsRetypedSeparator(t *testing.T) {
+	sbVar := tcg.UEFIVariableData{
+		Header:       tcg.UEFIVariableDataHeader{UnicodeNameLength: 10, VariableDataLength: 1},
+		UnicodeName:  []uint16{'S', 'e', 'c', 'u', 'r', 'e', 'B', 'o', 'o', 't'},
+		VariableData: []byte{1},
+	}
+	sbData, err := sbVar.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name    string
+		cfg     registerConfig
+		mr      uint32
+		retype  tcg.EventType
+		altData bool
+	}{
+		{name: "RTMR secure boot", cfg: RTMRRegisterConfig, mr: RTMRRegisterConfig.SecureBootIdx, retype: tcg.EFIVariableBoot},
+		{name: "RTMR secure boot altered data", cfg: RTMRRegisterConfig, mr: RTMRRegisterConfig.SecureBootIdx, retype: tcg.EFIVariableBoot, altData: true},
+		{name: "TPM firmware driver", cfg: TPMRegisterConfig, mr: TPMRegisterConfig.FirmwareDriverIdx, retype: tcg.EFIPlatformFirmwareBlob},
+		{name: "TPM firmware driver altered data", cfg: TPMRegisterConfig, mr: TPMRegisterConfig.FirmwareDriverIdx, retype: tcg.EFIPlatformFirmwareBlob, altData: true},
+	}
+	for _, tt := range tests {
+		for _, sc := range separatorCases {
+			t.Run(tt.name+"/"+sc.name, func(t *testing.T) {
+				retyped := newEvent(t, tt.mr, tt.retype, sc.data)
+				if tt.altData {
+					retyped.Data = []byte("not a separator")
+				}
+				events := getEventsFromLog(t, []tcg.Event{
+					retyped,
+					newEvent(t, tt.cfg.SecureBootIdx, tcg.EFIVariableDriverConfig, sbData),
+					newSeparatorEvent(t, tt.mr),
+				})
+				_, err := ParseSecurebootState(events, tt.cfg, Opts{})
+				if !errors.Is(err, errRetypedSeparator) {
+					t.Errorf("ParseSecurebootState() error = %v, want %v", err, errRetypedSeparator)
+				}
+			})
+		}
+	}
+}
+
 // Separator events with the correct type must still pass for both values.
 func TestPlatformStateAcceptsSeparator(t *testing.T) {
 	for _, tc := range separatorCases {

@@ -90,6 +90,7 @@ func ParseSecurebootStateLegacy(events []tcg.Event) (*SecurebootState, error) {
 	// - All events are parsable according to their event type.
 	// - All events have digests values corresponding to their data/event type.
 	// - No unverifiable events were present.
+	// - No non-separator event carries a separator digest.
 	// - All variables are specified before the separator and never duplicated.
 	// - The SecureBoot variable has a value of 0 or 1.
 	// - If SecureBoot was 1 (enabled), authority events were present indicating
@@ -127,6 +128,10 @@ func ParseSecurebootState(events []tcg.Event, registerCfg registerConfig, opts O
 
 		if err := verifyEventDigest(e, et, registerCfg.SecureBootIdx); err != nil {
 			return nil, err
+		}
+		// The event type is not measured, so detect separators by their digest.
+		if et != tcg.Separator && hasSeparatorDigest(e) {
+			return nil, fmt.Errorf("event %d: MR%d %w %v", e.Num(), e.MRIndex(), errRetypedSeparator, et)
 		}
 
 		switch e.MRIndex() {
@@ -318,6 +323,11 @@ func requiresDigestVerification(mr uint32, et tcg.EventType, secureBootIdx uint3
 		}
 	}
 	return false
+}
+
+func hasSeparatorDigest(e tcg.Event) bool {
+	return DigestEquals(e, []byte{0, 0, 0, 0}) == nil ||
+		DigestEquals(e, []byte{0xff, 0xff, 0xff, 0xff}) == nil
 }
 
 func verifyEventDigest(e tcg.Event, et tcg.EventType, secureBootIdx uint32) error {
