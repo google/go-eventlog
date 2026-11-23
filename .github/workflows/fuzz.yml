@@ -18,6 +18,8 @@ jobs:
             target: FuzzTLVUnmarshalBinary
           - pkg: ./tcg
             target: FuzzParseEventLog
+          - pkg: ./tcg
+            target: FuzzParseUEFIVariableData
           - pkg: ./tpmeventlog
             target: FuzzReplayAndExtract
           - pkg: ./ccel
