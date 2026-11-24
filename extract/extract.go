@@ -230,14 +230,14 @@ func SecureBootState(replayEvents []tcg.Event, registerCfg registerConfig, opts 
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse SecureBootState: %v", err)
 	}
-	if len(attestSbState.PreSeparatorAuthority) != 0 {
-		return nil, fmt.Errorf("event log contained %v pre-separator authorities, which are not expected or supported", len(attestSbState.PreSeparatorAuthority))
+	if n := len(attestSbState.PreSeparatorAuthority) + len(attestSbState.PreSeparatorAuthorityHashes); n != 0 {
+		return nil, fmt.Errorf("event log contained %v pre-separator authorities, which are not expected or supported", n)
 	}
 	return &pb.SecureBootState{
 		Enabled:   attestSbState.Enabled,
 		Db:        convertToPbDatabase(attestSbState.PermittedKeys, attestSbState.PermittedHashes),
 		Dbx:       convertToPbDatabase(attestSbState.ForbiddenKeys, attestSbState.ForbiddenHashes),
-		Authority: convertToPbDatabase(attestSbState.PostSeparatorAuthority, nil),
+		Authority: convertToPbDatabase(attestSbState.PostSeparatorAuthority, attestSbState.PostSeparatorAuthorityHashes),
 		Pk:        convertToPbDatabase(attestSbState.PlatformKeys, attestSbState.PlatformKeyHashes),
 		Kek:       convertToPbDatabase(attestSbState.ExchangeKeys, attestSbState.ExchangeKeyHashes),
 	}, nil

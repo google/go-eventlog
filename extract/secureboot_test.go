@@ -587,3 +587,40 @@ func TestParseSecurebootState_AcceptsErrSigMissingGUID(t *testing.T) {
 		t.Errorf("authority cert mismatch (-want +got):\n%s", diff)
 	}
 }
+
+func TestSecureBootStateHashAuthority(t *testing.T) {
+	// An image enrolled by hash (for example with mokutil --import-hash) is
+	// verified by shim against MokListRT, and shim measures the matching entry,
+	// an EFI_SIGNATURE_DATA holding the image digest, as the authority.
+	imageDigest := sha256.Sum256([]byte("EFI application"))
+	sigData := append(bytes.Repeat([]byte{0x11}, 16), imageDigest[:]...)
+	authorityBytes := buildShimAuthorityBuffer(t, "MokListRT", sigData)
+	authorityDigest := sha256.Sum256(authorityBytes)
+	authority := tcg.Event{
+		Index:  7,
+		Type:   tcg.EFIVariableAuthority,
+		Data:   authorityBytes,
+		Digest: authorityDigest[:],
+	}
+	sepDigest := sha256.Sum256([]byte{0x00, 0x00, 0x00, 0x00})
+	separator := tcg.Event{
+		Index:  7,
+		Type:   tcg.Separator,
+		Data:   []byte{0x00, 0x00, 0x00, 0x00},
+		Digest: sepDigest[:],
+	}
+	events := []tcg.Event{separator, authority}
+
+	sbState, err := extract.SecureBootState(events, extract.TPMRegisterConfig, extract.Opts{})
+	if err != nil {
+		t.Fatalf("SecureBootState() failed: %v", err)
+	}
+	if diff := cmp.Diff([][]byte{imageDigest[:]}, sbState.GetAuthority().GetHashes()); diff != "" {
+		t.Errorf("Authority.Hashes mismatch (-want +got):\n%s", diff)
+	}
+
+	// Pre-separator authorities stay unsupported, whether certificate or hash.
+	if _, err := extract.SecureBootState([]tcg.Event{authority, separator}, extract.TPMRegisterConfig, extract.Opts{}); err == nil || !strings.Contains(err.Error(), "pre-separator") {
+		t.Errorf("SecureBootState() error = %v, want pre-separator authority error", err)
+	}
+}

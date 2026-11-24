@@ -16,6 +16,7 @@ package tcg
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/x509"
 	"encoding/binary"
 	"errors"
@@ -405,6 +406,10 @@ func (v *UEFIVariableData) SignatureData() (certs []x509.Certificate, hashes [][
 // event.
 type UEFIVariableAuthority struct {
 	Certs []x509.Certificate
+	// Hashes holds the image digest of an authority that is an entry of a
+	// hash signature list (for example EFI_CERT_SHA256_GUID) instead of a
+	// certificate.
+	Hashes [][]byte
 }
 
 // ParseUEFIVariableAuthority parses the data section of an event structured as
@@ -421,8 +426,8 @@ func ParseUEFIVariableAuthority(v UEFIVariableData) (UEFIVariableAuthority, erro
 		unicodeNameEquals(v, shimMokListTrustedVarName)) { //https://github.com/rhboot/shim/blob/4e513405b4f1641710115780d19dcec130c5208f/mok.c#L169-L182
 		return UEFIVariableAuthority{}, nil
 	}
-	certs, err := parseEfiSignature(v.VariableData)
-	return UEFIVariableAuthority{Certs: certs}, err
+	certs, hashes, err := parseEfiSignature(v.VariableData)
+	return UEFIVariableAuthority{Certs: certs, Hashes: hashes}, err
 }
 
 func unicodeNameEquals(v UEFIVariableData, comp []uint16) bool {
@@ -577,11 +582,15 @@ type EFISignatureData struct {
 	SignatureData  []byte // []int8
 }
 
-func parseEfiSignature(b []byte) ([]x509.Certificate, error) {
+// parseEfiSignature parses the EFI_SIGNATURE_DATA of an authority event. Its
+// SignatureData is either a certificate or, when the image was allowed by its
+// digest, an entry of a hash signature list such as EFI_CERT_SHA256_GUID.
+func parseEfiSignature(b []byte) ([]x509.Certificate, [][]byte, error) {
 	certificates := []x509.Certificate{}
+	var hashes [][]byte
 
 	if len(b) < 16 {
-		return nil, fmt.Errorf("invalid signature: buffer smaller than header (%d < %d)", len(b), 16)
+		return nil, nil, fmt.Errorf("invalid signature: buffer smaller than header (%d < %d)", len(b), 16)
 	}
 
 	buf := bytes.NewReader(b)
@@ -589,10 +598,10 @@ func parseEfiSignature(b []byte) ([]x509.Certificate, error) {
 	signature.SignatureData = make([]byte, len(b)-16)
 
 	if err := binary.Read(buf, binary.LittleEndian, &signature.SignatureOwner); err != nil {
-		return certificates, err
+		return certificates, nil, err
 	}
 	if err := binary.Read(buf, binary.LittleEndian, &signature.SignatureData); err != nil {
-		return certificates, err
+		return certificates, nil, err
 	}
 
 	cert, err := x509.ParseCertificate(signature.SignatureData)
@@ -606,9 +615,22 @@ func parseEfiSignature(b []byte) ([]x509.Certificate, error) {
 		if err2 == nil {
 			certificates = append(certificates, *cert)
 			err = ErrSigMissingGUID
+		} else if isEfiSignatureHashSize(len(signature.SignatureData)) {
+			hashes = append(hashes, signature.SignatureData)
+			err = nil
 		}
 	}
-	return certificates, err
+	return certificates, hashes, err
+}
+
+// isEfiSignatureHashSize reports whether n is the size of the digest in a
+// SHA-1, SHA-256, SHA-384 or SHA-512 signature list entry.
+func isEfiSignatureHashSize(n int) bool {
+	switch n {
+	case crypto.SHA1.Size(), crypto.SHA256.Size(), crypto.SHA384.Size(), crypto.SHA512.Size():
+		return true
+	}
+	return false
 }
 
 // EFIDevicePathElement describes an EFI_DEVICE_PATH.
